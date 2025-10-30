@@ -1,0 +1,421 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f5f5f5;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Reset Material-UI */
+.MuiCssBaseline-root {
+  margin: 0;
+  padding: 0;
+}
+
+/* Remover backdrop do drawer */
+.MuiBackdrop-root {
+  display: none !important;
+}
+
+.MuiAppBar-root {
+  z-index: 1300;
+  position: fixed !important;
+}
+
+/* Garantir que o sidebar funcione corretamente */
+.MuiDrawer-paper {
+  position: fixed !important;
+  top: 64px !important;
+  left: 0 !important;
+  height: calc(100vh - 64px) !important;
+  z-index: 1200 !important;
+  border: none !important;
+  transition: transform 0.3s ease-in-out !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+}
+
+/* Remover blur de todos os elementos do drawer */
+.MuiDrawer-root,
+.MuiDrawer-root *,
+.MuiDrawer-paper,
+.MuiDrawer-paper * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+}
+
+/* Garantir que o conteúdo principal não sobreponha */
+.MuiBox-root {
+  display: block;
+}
+
+/* Corrigir problemas de posicionamento */
+.MuiContainer-root {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Corrigir problemas de flexbox */
+.MuiBox-root[style*="display: flex"] {
+  display: flex !important;
+}
+
+/* Estilos para adaptação do conteúdo principal */
+.main-content {
+  transition: margin-left 0.3s ease-in-out, width 0.3s ease-in-out;
+}
+
+/* Garantir que o conteúdo principal se adapte corretamente */
+@media (min-width: 900px) {
+  .main-content-with-sidebar {
+    margin-left: 240px;
+    width: calc(100% - 240px);
+  }
+}
+
+/* Responsividade para dispositivos móveis */
+@media (max-width: 899px) {
+  .main-content-with-sidebar {
+    margin-left: 0;
+    width: 100%;
+  }
+  
+  .MuiDrawer-paper {
+    transform: translateX(-100%);
+  }
+  
+  .MuiDrawer-paper.MuiDrawer-paperAnchorLeft {
+    transform: translateX(0);
+  }
+}
+
+/* Animações otimizadas com transições suaves */
+.MuiDialog-root {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.MuiDialog-paper {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { 
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to { 
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-20px) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Efeito de blur sutil para modais - COM DROPDOWNS LIMPOS */
+.MuiDialog-root .MuiBackdrop-root,
+.MuiModal-root .MuiBackdrop-root {
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  background-color: rgba(255, 255, 255, 0.3) !important;
+  transition: backdrop-filter 0.4s ease-in-out, background-color 0.4s ease-in-out !important;
+}
+
+/* Remover blur apenas quando não há modais abertos */
+body:not(.modal-open) .MuiBackdrop-root {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background-color: transparent !important;
+  transition: none !important;
+}
+
+/* GARANTIR que drawer NUNCA tenha blur, mesmo com modais abertos */
+.MuiDrawer-root,
+.MuiDrawer-root *,
+.MuiDrawer-paper,
+.MuiDrawer-paper *,
+.MuiDrawer-root .MuiBackdrop-root,
+.MuiDrawer-paper .MuiBackdrop-root,
+[class*="MuiDrawer"],
+[class*="MuiDrawer"] * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+  background: none !important;
+}
+
+/* Excluir Drawer de qualquer blur - REGRAS AGRESSIVAS */
+.MuiDrawer-root,
+.MuiDrawer-root *,
+.MuiDrawer-paper,
+.MuiDrawer-paper *,
+[class*="MuiDrawer"],
+[class*="MuiDrawer"] * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+  will-change: transform !important;
+}
+
+/* Remover blur de todos os elementos */
+* {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+}
+
+/* Remover blur especificamente do drawer e seus elementos */
+.MuiDrawer-root,
+.MuiDrawer-root *,
+.MuiDrawer-paper,
+.MuiDrawer-paper *,
+.MuiDrawer-root .MuiBackdrop-root,
+.MuiDrawer-paper .MuiBackdrop-root {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+  background: none !important;
+}
+
+/* Estilo do item selecionado no menu lateral */
+.MuiDrawer-paper .MuiListItemButton-root.Mui-selected {
+  background-color: transparent !important;
+  color: black !important;
+  font-weight: bold !important;
+}
+
+.MuiDrawer-paper .MuiListItemButton-root.Mui-selected .MuiListItemIcon-root {
+  color: black !important;
+}
+
+.MuiDrawer-paper .MuiListItemButton-root.Mui-selected .MuiListItemText-root {
+  color: black !important;
+  font-weight: bold !important;
+}
+
+/* Garantir que as notificações apareçam abaixo do header */
+.MuiSnackbar-root {
+  z-index: 1400 !important;
+  top: 80px !important;
+}
+
+/* Estilos específicos para EnhancedNotification */
+.enhanced-notification {
+  z-index: 1400 !important;
+  top: 80px !important;
+}
+
+/* Garantir que FABs sempre fiquem visíveis */
+.MuiFab-root {
+  position: fixed !important;
+  bottom: 16px !important;
+  right: 16px !important;
+  z-index: 1000 !important;
+}
+
+/* Forçar posicionamento do FAB */
+[aria-label="adicionar"] {
+  position: fixed !important;
+  bottom: 16px !important;
+  right: 16px !important;
+  z-index: 1000 !important;
+}
+
+/* Garantir que o container principal não interfira */
+.main-content {
+  overflow: visible !important;
+}
+
+/* Otimizações de performance para dashboard */
+.dashboard-card {
+  will-change: transform;
+  contain: layout style paint;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-2px);
+  transition: transform 0.2s ease-in-out;
+}
+
+/* Melhorar performance de listas */
+.MuiList-root {
+  contain: layout;
+}
+
+.MuiListItem-root {
+  contain: layout style;
+}
+
+/* Otimizar renderização de avatares */
+.MuiAvatar-root {
+  contain: layout style paint;
+}
+
+/* Melhorar performance de chips */
+.MuiChip-root {
+  contain: layout style;
+}
+
+/* Estilos específicos para a tela de login */
+.login-page {
+  position: relative;
+  overflow: hidden;
+}
+
+
+
+@keyframes float {
+  0%, 100% { 
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% { 
+    transform: translateY(-20px) rotate(5deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    transform: scale(1);
+    opacity: 0.1;
+  }
+  50% { 
+    transform: scale(1.1);
+    opacity: 0.2;
+  }
+}
+
+.login-card {
+  backdrop-filter: blur(25px);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(25, 118, 210, 0.2);
+  box-shadow: 
+    0 20px 60px rgba(25, 118, 210, 0.15),
+    0 8px 25px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease-in-out;
+}
+
+.login-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 
+    0 25px 80px rgba(25, 118, 210, 0.2),
+    0 12px 35px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.login-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.login-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.login-button:hover::before {
+  left: 100%;
+}
+
+.login-input {
+  transition: all 0.3s ease-in-out;
+}
+
+.login-input:hover {
+  transform: translateY(-2px);
+}
+
+.login-input:focus-within {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(25, 118, 210, 0.1);
+}
+
+/* Animações de entrada para elementos */
+.fade-in {
+  animation: fadeInUp 0.8s ease-out forwards;
+}
+
+.slide-in-left {
+  animation: slideInLeft 0.8s ease-out forwards;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Responsividade aprimorada para login */
+@media (max-width: 768px) {
+  .login-page {
+    padding: 1rem;
+  }
+  
+  .login-card {
+    margin: 0.5rem;
+    padding: 1.5rem;
+  }
+  
+  .login-page::before {
+    animation-duration: 15s;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 1rem;
+    margin: 0.25rem;
+  }
+}

@@ -1,0 +1,21 @@
+{
+    "success": true,
+    "data": {
+      "posicoes": [
+        { "id": 1, "nome": "Pátio A" },
+        { "id": 2, "nome": "Oficina" }
+      ],
+      "marcas": [
+        { "id": 1, "nome": "Honda" },
+        { "id": 2, "nome": "Toyota" },
+        { "id": 3, "nome": "Ford" }
+      ],
+      "seguradoras": [
+        { "id": 1, "nome": "Azul Seguros" },
+        { "id": 2, "nome": "Porto Seguro" }
+      ],
+      "colaboradores": [
+        { "id": 1, "nome": "Funcionário Teste" }
+      ]
+    }
+  }

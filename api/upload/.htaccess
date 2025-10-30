@@ -1,0 +1,28 @@
+# Proteger pasta de uploads
+Order Deny,Allow
+Deny from all
+
+# Permitir apenas acesso via PHP (não direto)
+<Files "*.pdf">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Permitir acesso apenas para scripts PHP autorizados
+<Files "view.php">
+    Order Allow,Deny
+    Allow from all
+</Files>
+
+# Desabilitar execução de scripts PHP na pasta de uploads
+<Files "*.php">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Headers de segurança para arquivos PDF
+<FilesMatch "\.(pdf)$">
+    Header set Content-Type "application/pdf"
+    Header set Content-Disposition "inline"
+    Header set X-Content-Type-Options "nosniff"
+</FilesMatch>

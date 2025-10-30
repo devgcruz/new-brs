@@ -1,0 +1,49 @@
+{
+  "success": true,
+  "data": {
+    "posicoes": [
+      { "id": 1, "nome": "Pátio A" },
+      { "id": 2, "nome": "Pátio B" },
+      { "id": 3, "nome": "Oficina" },
+      { "id": 4, "nome": "Estacionamento" },
+      { "id": 5, "nome": "Depósito" }
+    ],
+    "marcas": [
+      { "id": 1, "nome": "Honda" },
+      { "id": 2, "nome": "Toyota" },
+      { "id": 3, "nome": "Ford" },
+      { "id": 4, "nome": "Volkswagen" },
+      { "id": 5, "nome": "Chevrolet" },
+      { "id": 6, "nome": "Fiat" },
+      { "id": 7, "nome": "Nissan" },
+      { "id": 8, "nome": "Hyundai" },
+      { "id": 9, "nome": "Renault" },
+      { "id": 10, "nome": "Peugeot" }
+    ],
+    "seguradoras": [
+      { "id": 1, "nome": "Azul Seguros" },
+      { "id": 2, "nome": "Porto Seguro" },
+      { "id": 3, "nome": "SulAmérica" },
+      { "id": 4, "nome": "Bradesco Seguros" },
+      { "id": 5, "nome": "Itaú Seguros" },
+      { "id": 6, "nome": "Liberty Seguros" },
+      { "id": 7, "nome": "Tokio Marine" },
+      { "id": 8, "nome": "HDI Seguros" },
+      { "id": 9, "nome": "Zurich Seguros" },
+      { "id": 10, "nome": "Allianz Seguros" }
+    ],
+    "colaboradores": [
+      { "id": 1, "nome": "João Silva" },
+      { "id": 2, "nome": "Maria Santos" },
+      { "id": 3, "nome": "Pedro Oliveira" },
+      { "id": 4, "nome": "Ana Costa" },
+      { "id": 5, "nome": "Carlos Ferreira" },
+      { "id": 6, "nome": "Lucia Rodrigues" },
+      { "id": 7, "nome": "Roberto Alves" },
+      { "id": 8, "nome": "Fernanda Lima" },
+      { "id": 9, "nome": "Marcos Pereira" },
+      { "id": 10, "nome": "Juliana Souza" }
+    ]
+  }
+}
+
