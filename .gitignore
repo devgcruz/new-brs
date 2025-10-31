@@ -6,6 +6,10 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Production logs (não versionar)
+api/logs/*.log
+logs/*.log
 lerna-debug.log*
 
 # ===================================================================

@@ -41,7 +41,9 @@ const PdfModal = ({ open, onClose, registroId }) => {
 
   // Carregar PDFs quando o modal abrir
   useEffect(() => {
-    if (open && registroId) {
+    // Evitar carregar quando for novo registro sem ID numérico
+    const isValidId = registroId && !isNaN(parseInt(registroId, 10));
+    if (open && isValidId) {
       loadPdfs();
     }
   }, [open, registroId]);
@@ -391,7 +393,7 @@ const PdfModal = ({ open, onClose, registroId }) => {
           }}>
             {viewingPdf && (
               <iframe
-                src={`${pdfService.getViewPdfUrl(viewingPdf.id)}?token=${localStorage.getItem('auth_token')}`}
+                src={pdfService.getViewPdfUrl(viewingPdf)}
                 width="100%"
                 height="100%"
                 style={{ border: 'none', borderRadius: '4px' }}

@@ -253,6 +253,12 @@ switch ($method) {
             respostaJson(true, ['id' => $entrada_id], 'Entrada criada com sucesso', 201);
             
         } catch (Exception $e) {
+            // Tratar violação de unicidade (placa duplicada) como erro de validação (422)
+            if (strpos($e->getMessage(), '1062') !== false || stripos($e->Message ?? '', 'duplicate entry') !== false) {
+                logSimples('❌ Erro ao criar entrada - placa duplicada', ['erro' => $e->getMessage()]);
+                respostaJson(false, null, 'Placa já está cadastrada', 422);
+                break;
+            }
             logSimples('❌ Erro ao criar entrada', ['erro' => $e->getMessage()]);
             respostaJson(false, null, 'Erro ao criar entrada', 500);
         }

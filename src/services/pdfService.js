@@ -147,8 +147,14 @@ const pdfService = {
   },
 
   // Visualizar PDF
-  getViewPdfUrl(pdfId) {
-    return `${API_BASE_URL.replace('/api', '')}/pdf-viewer.php?id=${pdfId}`;
+  getViewPdfUrl(pdf) {
+    // Usar token específico de visualização do PDF (mais seguro que auth_token)
+    const viewToken = pdf.token_visualizacao || pdf.token;
+    if (!viewToken) {
+      console.error('Token de visualização não encontrado no PDF');
+      return '';
+    }
+    return `${API_BASE_URL}/pdfs?id=${pdf.id}&action=view&token=${encodeURIComponent(viewToken)}`;
   },
 
   // Excluir PDF

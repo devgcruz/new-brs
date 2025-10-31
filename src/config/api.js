@@ -1,6 +1,8 @@
 // Configuração da API
 const API_CONFIG = {
-  BASE_URL: process.env.REACT_APP_API_URL || 'http://localhost:80/brs/api',
+  // Em desenvolvimento, o backend (Apache/XAMPP) atende em http://localhost/brs/api
+  // Use REACT_APP_API_URL para sobrescrever em outros ambientes
+  BASE_URL: process.env.REACT_APP_API_URL || 'http://localhost/brs/api',
   TIMEOUT: 10000, // 10 segundos
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY: 1000, // 1 segundo
@@ -26,7 +28,10 @@ const getDefaultHeaders = (customHeaders = {}, isFormData = false) => {
 
 // Função para fazer requisições com retry automático
 const makeRequest = async (url, options = {}) => {
-  const fullUrl = url.startsWith('http') ? url : `${API_CONFIG.BASE_URL}${url}`;
+  // Mapear rotas com fallback para ambientes onde o rewrite do host não funciona
+  // Em produção, alguns hosts não roteiam "/api/login" para index.php; usar login.php diretamente
+  const normalizedUrl = (url === '/login') ? '/login.php' : url;
+  const fullUrl = normalizedUrl.startsWith('http') ? normalizedUrl : `${API_CONFIG.BASE_URL}${normalizedUrl}`;
   
   // Detectar se é FormData
   const isFormData = options.body instanceof FormData;
@@ -63,8 +68,18 @@ const makeRequest = async (url, options = {}) => {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        // Caso especial: login com credenciais incorretas
+        if (response.status === 401 && (normalizedUrl.endsWith('/login') || normalizedUrl.endsWith('/login.php'))) {
+          try {
+            const data = await response.json();
+            return data; // retorna para o caller tratar mensagem amigável
+          } catch (_) {
+            return { success: false, message: 'Usuário ou senha incorretos' };
+          }
+        }
+
         if (response.status === 401) {
-          // Token inválido, redirecionar para login
+          // Token inválido em outras rotas: derruba sessão
           localStorage.removeItem('auth_token');
           localStorage.removeItem('user_data');
           window.location.href = '/login';

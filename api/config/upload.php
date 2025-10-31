@@ -9,8 +9,8 @@ define('UPLOAD_ALLOWED_TYPES', ['application/pdf']);
 define('UPLOAD_ALLOWED_EXTENSIONS', ['pdf']);
 
 // Configurações de Pastas
-define('UPLOAD_BASE_DIR', 'C:/xampp/htdocs/upload/');
-define('PDF_UPLOAD_DIR', UPLOAD_BASE_DIR . 'pdfs/');
+define('UPLOAD_BASE_DIR', __DIR__ . '/../upload/');
+define('PDF_UPLOAD_DIR', UPLOAD_BASE_DIR . 'pdf/');
 
 // Configurações de Segurança
 define('UPLOAD_SECURE_MODE', true);
@@ -75,6 +75,30 @@ function validateUploadFile($file) {
     }
     
     return $errors;
+}
+
+/**
+ * Sanitizar nome de arquivo
+ */
+function sanitizeFilename($filename) {
+    // Remover caracteres especiais e manter apenas letras, números, espaços, hífens, underscores e pontos
+    $sanitized = preg_replace('/[^a-zA-Z0-9\s\-_.]/', '', $filename);
+    
+    // Substituir múltiplos espaços por um único espaço
+    $sanitized = preg_replace('/\s+/', ' ', $sanitized);
+    
+    // Remover espaços no início e fim
+    $sanitized = trim($sanitized);
+    
+    // Limitar tamanho do nome do arquivo (máximo 255 caracteres)
+    if (strlen($sanitized) > 255) {
+        $path_info = pathinfo($sanitized);
+        $extension = isset($path_info['extension']) ? '.' . $path_info['extension'] : '';
+        $name = $path_info['filename'];
+        $sanitized = substr($name, 0, 255 - strlen($extension)) . $extension;
+    }
+    
+    return $sanitized;
 }
 
 /**
@@ -158,9 +182,14 @@ function checkDiskSpace($required_bytes) {
 }
 
 /**
- * Log de upload
+ * Log de upload (desabilitado em produção)
  */
 function logUpload($action, $data) {
+    // Desabilitar logs em produção
+    if (defined('PRODUCTION_MODE') && PRODUCTION_MODE) {
+        return;
+    }
+    
     $log_entry = [
         'timestamp' => date('Y-m-d H:i:s'),
         'action' => $action,
@@ -169,7 +198,7 @@ function logUpload($action, $data) {
         'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
     ];
     
-    $log_file = '../logs/upload.log';
+    $log_file = __DIR__ . '/../logs/upload.log';
     file_put_contents($log_file, json_encode($log_entry) . "\n", FILE_APPEND | LOCK_EX);
 }
 

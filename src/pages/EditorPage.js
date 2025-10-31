@@ -222,6 +222,8 @@ const EditorPage = () => {
       const response = await entradaService.saveEntrada(dataToSave);
       if (response.success) {
         setSuccess('Registro salvo com sucesso!');
+        // Garantir que nenhum modal permaneça aberto após salvar
+        setPdfModalOpen(false);
         setTimeout(() => {
           navigate('/dashboard/registrodeentrada');
         }, 1500);

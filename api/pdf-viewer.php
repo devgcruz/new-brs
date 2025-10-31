@@ -15,6 +15,7 @@ if (empty($token)) {
 }
 
 require_once "../config/db.php";
+require_once "../config/upload.php";
 
 try {
     // Buscar PDF pelo token
@@ -28,7 +29,7 @@ try {
         exit;
     }
     
-    $file_path = "../upload/pdfs/" . $pdf['CAMINHO_ARQUIVO'];
+    $file_path = PDF_UPLOAD_DIR . $pdf['CAMINHOPDF'];
     
     if (!file_exists($file_path)) {
         http_response_code(404);
@@ -38,7 +39,7 @@ try {
     
     // Headers para visualização inline
     header('Content-Type: application/pdf');
-    header('Content-Disposition: inline; filename="' . $pdf['NOME_ARQUIVO'] . '"');
+    header('Content-Disposition: inline; filename="' . ($pdf['DESCRICAO'] ?? 'documento') . '.pdf"');
     header('Content-Length: ' . filesize($file_path));
     header('Cache-Control: private, max-age=3600');
     

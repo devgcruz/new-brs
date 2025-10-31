@@ -34,7 +34,7 @@ const RegistrosPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedRegistro, setSelectedRegistro] = useState(null);
   
@@ -137,19 +137,20 @@ const RegistrosPage = () => {
   };
 
   const handleAddClick = () => {
-    setModalOpen(true);
+    setIsModalOpen(true);
   };
 
   const handleModalClose = () => {
-    setModalOpen(false);
+    setIsModalOpen(false);
   };
 
-  const handleSaveRegistro = async (formData) => {
+  const handleSaveSuccess = async () => {
     try {
+      setIsModalOpen(false);
       await loadEntradas();
       showSuccess('Registro criado com sucesso!');
     } catch (err) {
-      showError('Erro ao criar registro. Tente novamente.');
+      showError('Erro ao atualizar lista após salvar.');
     }
   };
 
@@ -640,9 +641,9 @@ const RegistrosPage = () => {
       </AccessibleFab>
 
       <NovoRegistroModal
-        open={modalOpen}
+        isOpen={isModalOpen}
         onClose={handleModalClose}
-        onSave={handleSaveRegistro}
+        onSaveSuccess={handleSaveSuccess}
       />
 
       <EditarRegistroModal

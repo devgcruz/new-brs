@@ -1,0 +1,112 @@
+# Configuração para produção
+###############################################
+# BRS - Frontend SPA + API (Apache .htaccess) #
+###############################################
+
+# Rewrites e comportamento básico
+RewriteEngine On
+RewriteBase /
+Options -MultiViews
+
+# Entregar index.html por padrão (SPA)
+DirectoryIndex index.html index.php
+
+## Removidos headers globais para evitar 500 em hosts restritivos
+
+# Permitir acesso direto aos arquivos da API
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^api/.*$ - [L]
+
+# ========================
+# API
+# ========================
+# Não interferir em arquivos/dirs existentes dentro de /api
+RewriteCond %{REQUEST_URI} ^/api/
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Roteamento da API para o roteador PHP
+RewriteCond %{REQUEST_URI} ^/api/
+RewriteRule ^api/(.*)$ api/index.php [QSA,L]
+
+# ========================
+# STATIC (performance)     
+# ========================
+# Não reescrever assets estáticos e arquivos conhecidos (evita servir HTML no lugar de JS/CSS)
+RewriteCond %{REQUEST_URI} !^/api/
+RewriteRule ^(static/|favicon\.ico$|asset-manifest\.json$|manifest\.json$|robots\.txt$|logo.*\.(png|svg)$) - [L]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Se for POST em /login (fallback antigo), enviar para a API
+RewriteCond %{REQUEST_URI} !^/api/
+RewriteCond %{REQUEST_METHOD} =POST
+RewriteRule ^login$ api/login.php [QSA,L]
+
+# Reescrever rotas SPA conhecidas explicitamente (ajuda em hosts restritivos)
+RewriteRule ^login$ index.html [QSA,L]
+RewriteRule ^dashboard(?:/.*)?$ index.html [QSA,L]
+RewriteRule ^profile(?:/.*)?$ index.html [QSA,L]
+
+# Fallback para qualquer outra rota SPA
+RewriteRule . index.html [L]
+
+# Tratar 404 do host caindo no app (evita "File not found."), sem capturar /api
+ErrorDocument 404 /index.html
+
+# ========================
+# Caching / Expiração
+# ========================
+<IfModule mod_expires.c>
+  ExpiresActive On
+  # HTML – curto para permitir atualizações do shell do SPA
+  ExpiresByType text/html "access plus 1h"
+  # Imagens
+  ExpiresByType image/webp  "access plus 6 months"
+  ExpiresByType image/svg+xml "access plus 6 months"
+  ExpiresByType image/png  "access plus 6 months"
+  ExpiresByType image/jpeg "access plus 6 months"
+  ExpiresByType image/gif  "access plus 6 months"
+  # CSS/JS – versões com hash podem ter cache longo
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType application/x-javascript "access plus 1 year"
+  # Manifest/JSON
+  ExpiresByType application/manifest+json "access plus 7 days"
+  ExpiresByType application/json "access plus 7 days"
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Cache-Control para assets com hash (em static/)
+  <FilesMatch "^(.+)$">
+    Header unset ETag
+  </FilesMatch>
+  FileETag None
+
+  # Assets estáticos (usar SetEnvIf porque <Location> não é permitido em .htaccess)
+  SetEnvIf Request_URI "^/static/" IS_STATIC=1
+  Header set Cache-Control "public, max-age=31536000, immutable" env=IS_STATIC
+
+  # HTML: evitar cache agressivo do index.html
+  <FilesMatch "^(index\.html)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+
+  # Segurança básica
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+## Compressão comentada para evitar 500 em ambientes sem módulos
+# <IfModule mod_deflate.c>
+#   AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css application/javascript application/json application/xml image/svg+xml
+# </IfModule>
+
+# <IfModule mod_brotli.c>
+#   AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/xml text/css application/javascript application/json application/xml image/svg+xml
+# </IfModule>

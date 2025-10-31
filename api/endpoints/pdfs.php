@@ -1,7 +1,4 @@
 <?php
-
-// Incluir configuração CORS centralizada
-require_once __DIR__ . '/../config/cors.php';
 /**
  * Endpoint de PDFs
  * Substitui PdfController do Laravel
@@ -12,8 +9,16 @@ if (!defined('API_BASE_DIR')) {
     define('API_BASE_DIR', dirname(__DIR__));
 }
 
-header("Content-Type: application/json");
+// Verificar se é visualização ou download (não usar CORS neste caso)
+$action = $_GET['action'] ?? 'list';
+$isPdfView = ($_SERVER['REQUEST_METHOD'] === 'GET' && ($action === 'view' || $action === 'download'));
 
+// Incluir configuração CORS centralizada apenas para operações normais
+if (!$isPdfView) {
+    require_once __DIR__ . '/../config/cors.php';
+}
+
+header("Content-Type: application/json");
 
 require_once API_BASE_DIR . "/config/db.php";
 require_once API_BASE_DIR . "/config/table-mapping.php";
@@ -23,61 +28,142 @@ require_once API_BASE_DIR . "/helpers/auth.php";
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Verificar autenticação para todas as operações
-$usuario = middlewareAutenticacao();
+// Resolver caminho absoluto do PDF considerando registros legados
+function resolvePdfAbsolutePath($storedPath) {
+    $caminho = (string)$storedPath;
+    if ($caminho === '') {
+        return '';
+    }
+    // Normalizar barras
+    $cTrim = ltrim(str_replace('\\', '/', $caminho), '/');
+
+    $docRoot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
+    $candidates = [];
+
+    // 1) Caminho usual: base configurada + relativo (ex: YYYY/MM/file.pdf)
+    $candidates[] = rtrim(PDF_UPLOAD_DIR, '/').'/'.$cTrim;
+
+    // 2) Se veio com prefixo api/upload/... tentar a partir do document root
+    $candidates[] = $docRoot.'/'.$cTrim; // ex: /home/.../public_html/api/upload/.../file.pdf
+
+    // 3) Se veio como upload/... sem api/, tentar /api/upload
+    if (preg_match('#^upload/#', $cTrim)) {
+        $candidates[] = $docRoot.'/api/'.$cTrim;
+    }
+
+    // 4) Ajuste de legado: trocar pdfs/ por pdf/
+    $candidates[] = str_replace('/pdfs/', '/pdf/', $docRoot.'/'.$cTrim);
+    $candidates[] = str_replace('/pdfs/', '/pdf/', rtrim(PDF_UPLOAD_DIR, '/').'/'.$cTrim);
+
+    // 5) Se for caminho absoluto (Linux/Windows), tentar direto
+    if (preg_match('#^/|^[A-Za-z]:/#', $caminho)) {
+        $candidates[] = $caminho;
+    }
+
+    foreach ($candidates as $candidate) {
+        if ($candidate && file_exists($candidate)) {
+            return $candidate;
+        }
+    }
+    return ''; // não encontrado
+}
+
+// Verificar autenticação para operações normais (não para visualização/download)
+$usuario = null;
+if (!$isPdfView) {
+    $usuario = middlewareAutenticacao();
+}
 
 switch ($method) {
     case 'GET':
         // Listar PDFs ou visualizar PDF
         $entrada_id = $_GET['entrada_id'] ?? '';
         $pdf_id = $_GET['id'] ?? '';
-        $action = $_GET['action'] ?? 'list';
         
         if ($action === 'view' && !empty($pdf_id)) {
-            // Visualizar PDF
+            // Visualizar PDF - não enviar JSON, enviar PDF diretamente
+            // Remover headers CORS para visualização de PDF
+            header_remove();
+            
+            // Verificar token de visualização via URL
+            $view_token = $_GET['token'] ?? '';
+            if (empty($view_token)) {
+                http_response_code(401);
+                echo 'Token não fornecido';
+                exit;
+            }
+            
             try {
                 $pdfs_table = getTableName('pdfs');
-                $stmt = $pdo->prepare("SELECT ID_PDF as id, DESCRICAO, CAMINHOPDF FROM $pdfs_table WHERE ID_PDF = :id LIMIT 1");
-                $stmt->execute(['id' => $pdf_id]);
+                $stmt = $pdo->prepare("SELECT ID_PDF as id, DESCRICAO, CAMINHOPDF FROM $pdfs_table WHERE ID_PDF = :id AND token_visualizacao = :token LIMIT 1");
+                $stmt->execute([
+                    'id' => $pdf_id,
+                    'token' => $view_token
+                ]);
                 $pdf = $stmt->fetch();
                 
                 if (!$pdf) {
-                    respostaJson(false, null, 'PDF não encontrado', 404);
+                    http_response_code(404);
+                    echo 'PDF não encontrado ou token inválido';
+                    exit;
                 }
                 
-                $file_path = "../upload/pdfs/" . $pdf['CAMINHOPDF'];
-                
-                if (!file_exists($file_path)) {
-                    respostaJson(false, null, 'Arquivo PDF não encontrado no servidor', 404);
+                $file_path = resolvePdfAbsolutePath($pdf['CAMINHOPDF']);
+                if ($file_path === '' || !file_exists($file_path)) {
+                    http_response_code(404);
+                    echo 'Arquivo PDF não encontrado no servidor';
+                    exit;
                 }
                 
-                // Retornar o PDF
+                // Headers específicos para PDF
                 header('Content-Type: application/pdf');
                 header('Content-Disposition: inline; filename="' . $pdf['DESCRICAO'] . '.pdf"');
                 header('Content-Length: ' . filesize($file_path));
+                header('Cache-Control: private, max-age=3600');
+                header('X-Frame-Options: ALLOWALL');
+                header('Content-Security-Policy: frame-ancestors *');
+                
                 readfile($file_path);
                 exit;
                 
             } catch (Exception $e) {
                 logSimples('❌ Erro ao visualizar PDF', ['erro' => $e->getMessage()]);
-                respostaJson(false, null, 'Erro ao visualizar PDF', 500);
+                http_response_code(500);
+                echo 'Erro ao visualizar PDF';
+                exit;
             }
         } else if ($action === 'download' && !empty($pdf_id)) {
-            // Download PDF
+            // Download PDF - não enviar JSON, enviar PDF diretamente
+            header_remove();
+            
+            // Verificar token de visualização via URL
+            $view_token = $_GET['token'] ?? '';
+            if (empty($view_token)) {
+                http_response_code(401);
+                echo 'Token não fornecido';
+                exit;
+            }
+            
             try {
                 $pdfs_table = getTableName('pdfs');
-                $stmt = $pdo->prepare("SELECT ID_PDF as id, DESCRICAO, CAMINHOPDF FROM $pdfs_table WHERE ID_PDF = :id LIMIT 1");
-                $stmt->execute(['id' => $pdf_id]);
+                $stmt = $pdo->prepare("SELECT ID_PDF as id, DESCRICAO, CAMINHOPDF FROM $pdfs_table WHERE ID_PDF = :id AND token_visualizacao = :token LIMIT 1");
+                $stmt->execute([
+                    'id' => $pdf_id,
+                    'token' => $view_token
+                ]);
                 $pdf = $stmt->fetch();
                 
                 if (!$pdf) {
-                    respostaJson(false, null, 'PDF não encontrado', 404);
+                    http_response_code(404);
+                    echo 'PDF não encontrado';
+                    exit;
                 }
                 
-                $file_path = "../upload/pdfs/" . $pdf['CAMINHOPDF'];
-                
-                if (!file_exists($file_path)) {
-                    respostaJson(false, null, 'Arquivo PDF não encontrado no servidor', 404);
+                $file_path = resolvePdfAbsolutePath($pdf['CAMINHOPDF']);
+                if ($file_path === '' || !file_exists($file_path)) {
+                    http_response_code(404);
+                    echo 'Arquivo PDF não encontrado no servidor';
+                    exit;
                 }
                 
                 // Forçar download
@@ -89,7 +175,9 @@ switch ($method) {
                 
             } catch (Exception $e) {
                 logSimples('❌ Erro ao fazer download do PDF', ['erro' => $e->getMessage()]);
-                respostaJson(false, null, 'Erro ao fazer download do PDF', 500);
+                http_response_code(500);
+                echo 'Erro ao fazer download do PDF';
+                exit;
             }
         } else {
             // Listar PDFs
@@ -109,7 +197,7 @@ switch ($method) {
                 
                 // Buscar PDFs da entrada
                 $pdfs_table = getTableName('pdfs');
-                $stmt = $pdo->prepare("SELECT ID_PDF as id, ID_ENTRADA, DESCRICAO, CAMINHOPDF, DATA_REGISTRO FROM $pdfs_table WHERE ID_ENTRADA = :entrada_id ORDER BY DATA_REGISTRO DESC");
+                $stmt = $pdo->prepare("SELECT ID_PDF as id, ID_ENTRADA, DESCRICAO, CAMINHOPDF, token_visualizacao, DATA_REGISTRO FROM $pdfs_table WHERE ID_ENTRADA = :entrada_id ORDER BY DATA_REGISTRO DESC");
                 $stmt->execute(['entrada_id' => $entrada_id]);
                 $pdfs = $stmt->fetchAll();
                 
@@ -162,9 +250,19 @@ switch ($method) {
             $date_path = createDateBasedPath();
             $upload_dir = PDF_UPLOAD_DIR . $date_path;
             
-            // Gerar nome único para o arquivo
-            $unique_name = generateUniqueFileName($file['name']);
-            $file_path = $upload_dir . $unique_name;
+            // Sanitizar o nome do arquivo para evitar problemas
+            $safe_filename = sanitizeFilename($file['name']);
+            
+            // Verificar se arquivo com mesmo nome já existe
+            $counter = 1;
+            $original_name = $safe_filename;
+            while (file_exists($upload_dir . $safe_filename)) {
+                $path_info = pathinfo($original_name);
+                $safe_filename = $path_info['filename'] . '_' . $counter . '.' . $path_info['extension'];
+                $counter++;
+            }
+            
+            $file_path = $upload_dir . $safe_filename;
             
             // Mover arquivo para pasta de destino
             if (!move_uploaded_file($file['tmp_name'], $file_path)) {
@@ -175,21 +273,22 @@ switch ($method) {
             }
             
             // Salvar informações no banco
-            $caminho_relativo = $date_path . $unique_name;
+            $caminho_relativo = $date_path . $safe_filename;
             $token_visualizacao = generateViewToken();
             
             $pdfs_table = getTableName('pdfs');
             $sql = "INSERT INTO $pdfs_table (
-                ID_ENTRADA, DESCRICAO, CAMINHOPDF, DATA_REGISTRO, created_at, updated_at
+                ID_ENTRADA, DESCRICAO, CAMINHOPDF, token_visualizacao, DATA_REGISTRO, created_at, updated_at
             ) VALUES (
-                :entrada_id, :descricao, :caminho_arquivo, NOW(), NOW(), NOW()
+                :entrada_id, :descricao, :caminho_arquivo, :token_visualizacao, NOW(), NOW(), NOW()
             )";
             
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
                 'entrada_id' => $entrada_id,
                 'descricao' => sanitizar($descricao),
-                'caminho_arquivo' => $caminho_relativo
+                'caminho_arquivo' => $caminho_relativo,
+                'token_visualizacao' => $token_visualizacao
             ]);
             
             $pdf_id = $pdo->lastInsertId();
@@ -207,7 +306,8 @@ switch ($method) {
                 'nome_arquivo' => $file['name'],
                 'tamanho' => $file['size'],
                 'caminho' => $caminho_relativo,
-                'descricao' => $descricao
+                'descricao' => $descricao,
+                'token_visualizacao' => $token_visualizacao
             ], 'PDF enviado com sucesso', 201);
             
         } catch (Exception $e) {
@@ -236,7 +336,7 @@ switch ($method) {
             }
             
             // Deletar arquivo físico
-            $file_path = "../upload/pdfs/" . $pdf['CAMINHOPDF'];
+            $file_path = PDF_UPLOAD_DIR . $pdf['CAMINHOPDF'];
             if (file_exists($file_path)) {
                 unlink($file_path);
             }

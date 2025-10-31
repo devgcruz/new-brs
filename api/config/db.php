@@ -4,7 +4,7 @@
  * Substitua os valores pelas suas credenciais de hospedagem compartilhada
  */
 
-$DB_HOST = "127.0.0.1";
+$DB_HOST = "localhost";
 $DB_USER = "root";
 $DB_PASS = "";
 $DB_NAME = "brs_database_target";

@@ -33,7 +33,9 @@ import useNotification from '../hooks/useNotification';
 import ValidationAlert from './ValidationAlert';
 
 
-const NovoRegistroModal = ({ open, onClose, onSave }) => {
+const NovoRegistroModal = ({ open, isOpen, onClose, onSave, onSaveSuccess }) => {
+  // Permitir backward-compat: prioriza isOpen quando fornecido
+  const effectiveOpen = typeof isOpen === 'boolean' ? isOpen : !!open;
   const [loading, setLoading] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [savedEntradaId, setSavedEntradaId] = useState(null);
@@ -110,7 +112,7 @@ const NovoRegistroModal = ({ open, onClose, onSave }) => {
 
   // Controlar estado de prontidão do formulário
   useEffect(() => {
-    if (open) {
+    if (effectiveOpen) {
       setIsReady(false); // Reseta o estado de prontidão ao abrir
       // Aguarda um pequeno delay para garantir que os dados foram carregados
       const timer = setTimeout(() => {
@@ -121,7 +123,9 @@ const NovoRegistroModal = ({ open, onClose, onSave }) => {
     } else {
       setIsReady(false);
     }
-  }, [open]);
+  }, [effectiveOpen]);
+
+  
 
   const tipos = useMemo(() => ['JUDICIAL', 'ADM'], []);
 
@@ -321,33 +325,24 @@ const NovoRegistroModal = ({ open, onClose, onSave }) => {
       
       if (response.success) {
         showSuccess('Registro salvo com sucesso!');
-        
-        // Armazenar ID da entrada criada para permitir upload de PDFs
+
         const entradaId = response.data.Id_Entrada || response.data.id;
         setSavedEntradaId(entradaId);
-        
-        // Se há observação inicial, criar como primeira observação na aba OBSERVAÇÕES
+
         if (formData.observacoes && formData.observacoes.trim() !== '') {
           try {
-            await observacaoService.createObservacao(entradaId, {
-              texto: formData.observacoes.trim()
-            });
-            console.log('Observação inicial criada na aba OBSERVAÇÕES');
+            await observacaoService.createObservacao(entradaId, { texto: formData.observacoes.trim() });
           } catch (obsError) {
             console.error('Erro ao criar observação inicial:', obsError);
-            // Não falhar o salvamento principal por causa da observação
           }
         }
-        
-        // Chamar callback de salvamento
-        if (onSave) {
+
+        // Preferir callback controlado pelo pai; fallback para onSave legado
+        if (typeof onSaveSuccess === 'function') {
+          onSaveSuccess(response.data);
+        } else if (typeof onSave === 'function') {
           onSave(response.data);
         }
-
-        // Fechar modal após um breve delay
-      setTimeout(() => {
-        onClose();
-        }, 1500);
       } else {
         // Tratar erro específico de placa duplicada
         if (response.errorType === 'placa_duplicada') {
@@ -366,7 +361,7 @@ const NovoRegistroModal = ({ open, onClose, onSave }) => {
     } finally {
       setLoading(false);
     }
-  }, [formData, onSave, colaboradores, onClose]);
+  }, [formData, onSave, onSaveSuccess, colaboradores]);
 
   const handleClose = useCallback(() => {
     // Resetar todos os campos para strings vazias para evitar mudança de controlado para não controlado
@@ -921,7 +916,7 @@ const NovoRegistroModal = ({ open, onClose, onSave }) => {
 
   return (
         <BlurredDialog
-          open={open}
+          open={effectiveOpen}
           onClose={handleClose}
           maxWidth="xl"
           fullWidth
@@ -970,6 +965,7 @@ const NovoRegistroModal = ({ open, onClose, onSave }) => {
         }}>
           <IconButton 
             onClick={handleClose} 
+            disabled={loading}
             size="small"
             sx={{ 
               p: { xs: 0.5, sm: 1 },

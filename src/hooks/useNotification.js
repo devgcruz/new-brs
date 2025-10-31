@@ -5,10 +5,10 @@ const useNotification = () => {
     open: false,
     message: '',
     severity: 'info',
-    duration: 6000
+    duration: 1000
   });
 
-  const showNotification = useCallback((message, severity = 'info', duration = 6000) => {
+  const showNotification = useCallback((message, severity = 'info', duration = 1000) => {
     setNotification({
       open: true,
       message,
@@ -17,19 +17,19 @@ const useNotification = () => {
     });
   }, []);
 
-  const showSuccess = useCallback((message, duration = 5000) => {
+  const showSuccess = useCallback((message, duration = 1000) => {
     showNotification(message, 'success', duration);
   }, [showNotification]);
 
-  const showError = useCallback((message, duration = 8000) => {
+  const showError = useCallback((message, duration = 1000) => {
     showNotification(message, 'error', duration);
   }, [showNotification]);
 
-  const showWarning = useCallback((message, duration = 6000) => {
+  const showWarning = useCallback((message, duration = 1000) => {
     showNotification(message, 'warning', duration);
   }, [showNotification]);
 
-  const showInfo = useCallback((message, duration = 5000) => {
+  const showInfo = useCallback((message, duration = 1000) => {
     showNotification(message, 'info', duration);
   }, [showNotification]);
 

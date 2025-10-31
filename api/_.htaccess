@@ -1,0 +1,52 @@
+# API directory rewrite rules
+RewriteEngine On
+
+# Allow direct access to existing files and directories
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Route everything else to api/index.php
+RewriteRule ^ index.php [QSA,L]
+
+# Enviar erros para o roteador da API (evita página genérica do host)
+ErrorDocument 404 /api/index.php
+ErrorDocument 405 /api/index.php
+
+# Headers CORS serão definidos pelo PHP para evitar duplicação
+
+# Headers de segurança
+Header always set X-Content-Type-Options nosniff
+Header always set X-Frame-Options SAMEORIGIN
+Header always set X-XSS-Protection "1; mode=block"
+
+# Lidar com OPTIONS requests - permitir que o PHP processe
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+# Proteger arquivos sensíveis
+<Files "*.php">
+    Order Allow,Deny
+    Allow from all
+</Files>
+
+<Files "config/*">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+<Files "logs/*">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Cache para arquivos estáticos
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/jpg "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+</IfModule>

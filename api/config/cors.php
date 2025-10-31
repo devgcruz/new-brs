@@ -1,34 +1,20 @@
 <?php
 /**
- * Configuração CORS centralizada
- * Headers CORS são definidos aqui para evitar duplicação
+ * CORS é tratado no Apache (.htaccess) em ambiente de desenvolvimento.
+ * Este arquivo evita definir cabeçalhos CORS para não duplicar valores.
  */
 
-// Remover qualquer header CORS existente para evitar duplicação
-@header_remove('Access-Control-Allow-Origin');
-@header_remove('Access-Control-Allow-Methods');
-@header_remove('Access-Control-Allow-Headers');
-@header_remove('Access-Control-Allow-Credentials');
-@header_remove('Access-Control-Max-Age');
+// Carregar configurações de ambiente se não estiverem definidas
+if (!defined('ALLOWED_ORIGINS')) {
+    require_once __DIR__ . '/environment.php';
+}
 
-// Aguardar um pouco para garantir que os headers foram removidos
-usleep(1000);
-
-// Definir headers CORS específicos para desenvolvimento
-header("Access-Control-Allow-Origin: http://localhost:3000", true);
-header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS", true);
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key, Accept", true);
-header("Access-Control-Allow-Credentials: true", true);
-header("Access-Control-Max-Age: 86400", true);
-
-// Lidar com preflight OPTIONS
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
+// Tratar requisições preflight no PHP apenas como fallback (Apache já retorna 204)
+if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
     exit;
 }
 
-// Definir Content-Type padrão apenas se não foi definido
-if (!headers_sent()) {
-    header("Content-Type: application/json; charset=utf-8");
-}
-
+// Não definir headers CORS aqui para evitar duplicidade com Apache.
+// Conteúdo JSON será definido pelos endpoints conforme necessário.
+?>

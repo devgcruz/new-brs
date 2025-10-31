@@ -33,7 +33,7 @@ const LoginPage = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/dashboard');
+      navigate('/dashboard/registrodeentrada');
     }
   }, [isAuthenticated, navigate]);
 
@@ -192,7 +192,7 @@ const LoginPage = () => {
     try {
       const result = await login(username, password);
       if (result.success) {
-        navigate('/dashboard');
+        navigate('/dashboard/registrodeentrada');
       } else {
         setError(result.error || 'Erro ao fazer login');
       }

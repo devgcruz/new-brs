@@ -4,6 +4,29 @@
  */
 
 /**
+ * Validar token de autenticação (para visualização de PDFs)
+ */
+function validarTokenAutenticacao($token) {
+    global $pdo;
+    
+    if (!$token) {
+        return false;
+    }
+    
+    try {
+        // Verificar token no banco
+        $stmt = $pdo->prepare("SELECT u.* FROM usuarios u WHERE u.token = :token AND u.status = 'ativo'");
+        $stmt->execute(['token' => $token]);
+        $usuario = $stmt->fetch();
+        
+        return $usuario ?: false;
+    } catch (Exception $e) {
+        logSimples('❌ Erro na validação de token', ['erro' => $e->getMessage()]);
+        return false;
+    }
+}
+
+/**
  * Verifica se o usuário está autenticado
  */
 function verificarAutenticacao($pdo) {
@@ -138,9 +161,14 @@ function sanitizar($dados) {
 }
 
 /**
- * Log simples
+ * Log simples (desabilitado em produção)
  */
 function logSimples($mensagem, $dados = []) {
+    // Desabilitar logs em produção
+    if (defined('PRODUCTION_MODE') && PRODUCTION_MODE) {
+        return;
+    }
+    
     $timestamp = date('Y-m-d H:i:s');
     $log = "[$timestamp] $mensagem";
     if (!empty($dados)) {

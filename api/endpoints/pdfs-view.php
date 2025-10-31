@@ -69,8 +69,7 @@ try {
     }
     
     // Verificar se o arquivo existe
-    $upload_base = 'C:/xampp/htdocs/upload/pdfs/';
-    $file_path = $upload_base . $pdf['CAMINHOPDF'];
+    $file_path = PDF_UPLOAD_DIR . $pdf['CAMINHOPDF'];
     
     if (!file_exists($file_path)) {
         logSimples('error', [

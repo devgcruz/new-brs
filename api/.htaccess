@@ -1,43 +1,35 @@
 RewriteEngine On
 
-# Redirecionar todas as requisições para index.php
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ index.php [QSA,L]
+# Do not rewrite existing files or directories
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
 
-# Headers CORS serão definidos pelo PHP para evitar duplicação
+# --- CORS at webserver level (handles OPTIONS before PHP) ---
+<IfModule mod_headers.c>
+    # Whitelist origins
+    SetEnvIfNoCase Origin "^http://localhost:3000$" ORIGIN_OK=$0
+    SetEnvIfNoCase Origin "^http://localhost:3001$" ORIGIN_OK=$0
+    SetEnvIfNoCase Origin "^http://127.0.0.1:3000$" ORIGIN_OK=$0
+    SetEnvIfNoCase Origin "^https://brsreguladora.com.br$" ORIGIN_OK=$0
+    SetEnvIfNoCase Origin "^https://www.brsreguladora.com.br$" ORIGIN_OK=$0
 
-# Headers de segurança
-Header always set X-Content-Type-Options nosniff
-Header always set X-Frame-Options SAMEORIGIN
-Header always set X-XSS-Protection "1; mode=block"
-
-# Lidar com OPTIONS requests - permitir que o PHP processe
-RewriteCond %{REQUEST_METHOD} OPTIONS
-RewriteRule ^(.*)$ index.php [QSA,L]
-
-# Proteger arquivos sensíveis
-<Files "*.php">
-    Order Allow,Deny
-    Allow from all
-</Files>
-
-<Files "config/*">
-    Order Deny,Allow
-    Deny from all
-</Files>
-
-<Files "logs/*">
-    Order Deny,Allow
-    Deny from all
-</Files>
-
-# Cache para arquivos estáticos
-<IfModule mod_expires.c>
-    ExpiresActive On
-    ExpiresByType text/css "access plus 1 month"
-    ExpiresByType application/javascript "access plus 1 month"
-    ExpiresByType image/png "access plus 1 month"
-    ExpiresByType image/jpg "access plus 1 month"
-    ExpiresByType image/jpeg "access plus 1 month"
+    Header always set Access-Control-Allow-Origin "%{ORIGIN_OK}e" env=ORIGIN_OK
+    Header always set Access-Control-Allow-Credentials "true" env=ORIGIN_OK
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-API-Key, Accept" env=ORIGIN_OK
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" env=ORIGIN_OK
+    Header always set Vary "Origin"
 </IfModule>
+
+# Short-circuit preflight requests
+RewriteCond %{REQUEST_METHOD} =OPTIONS
+RewriteRule ^ - [R=204,L]
+
+# Route everything else to API router
+RewriteRule ^ index.php [QSA,L]
+
+# Send 404/405 to router (consistent JSON)
+ErrorDocument 404 /api/index.php
+ErrorDocument 405 /api/index.php
+
+

@@ -4,6 +4,9 @@
  * Substitui routes/api.php do Laravel
  */
 
+// Carregar configurações de ambiente
+require_once __DIR__ . '/config/environment.php';
+
 // Incluir configuração CORS centralizada
 require_once __DIR__ . '/config/cors.php';
 
