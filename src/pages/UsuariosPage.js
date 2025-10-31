@@ -1,392 +1,310 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import userService from '../services/userService';
-import StatCard from '../components/StatCard';
 import {
-  Box,
+  Container,
+  Paper,
   Typography,
+  TextField,
   Button,
-  Card,
-  CardContent,
-  Grid,
+  Box,
+  Alert,
+  CircularProgress,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
-  Chip,
   IconButton,
-  Avatar,
-  Tooltip,
-  Alert,
-  Snackbar,
-  TextField,
-  InputAdornment,
-  CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  FormControlLabel,
-  Switch,
+  Fab,
+  InputAdornment,
+  Card,
+  CardContent,
+  Grid,
+  Pagination,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
+  Chip,
+  FormControlLabel,
   Checkbox,
-  ListItemText
+  ListItemText,
+  OutlinedInput
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Person as PersonIcon,
-  AdminPanelSettings as AdminIcon,
-  Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon,
   Search as SearchIcon,
-  Refresh as RefreshIcon
+  Person as PersonIcon,
+  VpnKey as VpnKeyIcon,
+  Block as BlockIcon,
+  CheckCircle as CheckCircleIcon
 } from '@mui/icons-material';
+import userService from '../services/userService';
+import useNotification from '../hooks/useNotification';
+import EnhancedNotification from '../components/EnhancedNotification';
 
 const UsuariosPage = () => {
   const [usuarios, setUsuarios] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [modalAberto, setModalAberto] = useState(false);
-  const [usuarioEditando, setUsuarioEditando] = useState(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [usuarioToDelete, setUsuarioToDelete] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, item: null });
+  const [passwordDialog, setPasswordDialog] = useState({ open: false, item: null });
+  const [roles, setRoles] = useState([]);
+  
+  // Estados de paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [paginationInfo, setPaginationInfo] = useState({});
+  
+  // Estados do formulário
   const [formData, setFormData] = useState({
-    nome: '',
-    Usuario: '',
+    name: '',
+    username: '',
     email: '',
-    Senha: '',
-    cargo: '',
-    permissoes: [],
-    roles: [],
-    status: 'ativo'
+    password: '',
+    roles: []
   });
   const [formLoading, setFormLoading] = useState(false);
-  const [availableRoles, setAvailableRoles] = useState([]);
-  const [statistics, setStatistics] = useState({
-    total: 0,
-    ativos: 0,
-    inativos: 0,
-    administradores: 0
-  });
-
-  // Opções de permissões disponíveis
-  const permissoesDisponiveis = [
-    { key: 'dashboard', label: 'Dashboard' },
-    { key: 'registros', label: 'Registros' },
-    { key: 'relatorios', label: 'Relatórios' },
-    { key: 'usuarios', label: 'Usuários' }
-  ];
-
-  // Carregar usuários da API
-  const carregarUsuarios = useCallback(async (filtros = {}) => {
-    try {
-      setLoading(true);
-      setError('');
-      
-      const response = await userService.getAllUsers({
-        ...filtros,
-        search: searchTerm || undefined
-      });
-      
-      if (response.success) {
-        setUsuarios(response.data || []);
-      } else {
-        setError(response.message || 'Erro ao carregar usuários');
-      }
-    } catch (err) {
-      setError('Erro inesperado ao carregar usuários');
-      console.error('Erro ao carregar usuários:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [searchTerm]);
-
-  // Carregar estatísticas
-  const carregarEstatisticas = useCallback(async () => {
-    try {
-      const response = await userService.getUserStats();
-      if (response.success) {
-        setStatistics(response.data);
-      }
-    } catch (err) {
-      console.error('Erro ao carregar estatísticas:', err);
-    }
-  }, []);
-
-  // Carregar roles disponíveis
-  const carregarRoles = useCallback(async () => {
+  
+  // Hook para notificações
+  const { notification, showSuccess, showError, hideNotification } = useNotification();
+  
+  // Carregar roles
+  const loadRoles = useCallback(async () => {
     try {
       const response = await userService.getRoles();
       if (response.success) {
-        setAvailableRoles(response.data);
+        const rolesData = Array.isArray(response.data) ? response.data : [];
+        setRoles(rolesData);
+      } else {
+        console.error('Erro ao carregar roles:', response.message);
+        setRoles([]);
       }
-    } catch (err) {
-      console.error('Erro ao carregar roles:', err);
+    } catch (error) {
+      console.error('Erro ao carregar roles:', error);
+      setRoles([]);
     }
   }, []);
-
-  // Efeito para carregar dados iniciais
+  
+  // Carregar usuários
+  const loadItems = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await userService.getAll(currentPage, perPage, searchTerm);
+      
+      if (response.success) {
+        // Garantir que response.data seja sempre um array
+        const usuariosData = Array.isArray(response.data) ? response.data : [];
+        setUsuarios(usuariosData);
+        setTotalPages(response.meta?.last_page || response.meta?.totalPages || 1);
+        setTotalItems(response.meta?.total || response.meta?.totalItems || 0);
+        setPaginationInfo(response.meta || {});
+      } else {
+        setUsuarios([]); // Garantir array vazio em caso de erro
+        showError('Erro ao carregar usuários');
+      }
+    } catch (error) {
+      console.error('Erro ao carregar usuários:', error);
+      setUsuarios([]); // Garantir array vazio em caso de exceção
+      showError('Erro ao carregar usuários');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPage, perPage, searchTerm, showError]);
+  
   useEffect(() => {
-    carregarUsuarios();
-    carregarEstatisticas();
-    carregarRoles();
-  }, [carregarUsuarios, carregarEstatisticas, carregarRoles]);
-
-  // Efeito para filtrar usuários quando o termo de busca muda
+    loadRoles();
+  }, [loadRoles]);
+  
+  useEffect(() => {
+    loadItems();
+  }, [loadItems]);
+  
+  // Buscar com debounce
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      carregarUsuarios();
+      if (currentPage === 1) {
+        loadItems();
+      } else {
+        setCurrentPage(1);
+      }
     }, 500);
     
     return () => clearTimeout(timeoutId);
-  }, [searchTerm, carregarUsuarios]);
-
-  // Função para abrir modal de criação
-  const handleNovoUsuario = () => {
-    setUsuarioEditando(null);
-    setFormData({
-      nome: '',
-      Usuario: '',
-      email: '',
-      Senha: '',
-      cargo: '',
-      permissoes: [],
-      roles: [],
-      status: 'ativo'
-    });
-    setModalAberto(true);
+  }, [searchTerm]);
+  
+  // Handlers
+  const handleNewItem = async () => {
+    setEditingItem(null);
+    setFormData({ name: '', username: '', email: '', password: '', roles: [] });
+    // Garantir que os roles estejam carregados antes de abrir o modal
+    if (roles.length === 0) {
+      await loadRoles();
+    }
+    setModalOpen(true);
   };
-
-  // Função para abrir modal de edição
-  const handleEditarUsuario = (usuario) => {
-    setUsuarioEditando(usuario);
+  
+  const handleEditItem = async (item) => {
+    setEditingItem(item);
     setFormData({
-      nome: usuario.nome || '',
-      Usuario: usuario.Usuario || '',
-      email: usuario.email || '',
-      Senha: '', // Sempre limpar senha na edição
-      cargo: usuario.cargo || '',
-      permissoes: usuario.permissoes || [],
-      roles: usuario.roles || [],
-      status: usuario.status || 'ativo'
+      name: item.nome || '',
+      username: item.username || '',
+      email: item.email || '',
+      password: '',
+      roles: (item.roles || []).map(r => r.id)
     });
-    setModalAberto(true);
+    // Garantir que os roles estejam carregados antes de abrir o modal
+    if (roles.length === 0) {
+      await loadRoles();
+    }
+    setModalOpen(true);
   };
-
-  // Função para salvar usuário
-  const handleSalvar = async () => {
+  
+  const handleDeleteItem = (item) => {
+    setDeleteDialog({ open: true, item });
+  };
+  
+  const handleToggleStatus = async (item) => {
     try {
-      setFormLoading(true);
-      
-      // Validações básicas
-      if (!formData.nome || !formData.Usuario || !formData.email) {
-        setSnackbar({
-          open: true,
-          message: 'Preencha todos os campos obrigatórios',
-          severity: 'error'
-        });
-        return;
-      }
-
-      // Para novos usuários, senha é obrigatória
-      if (!usuarioEditando && !formData.Senha) {
-        setSnackbar({
-          open: true,
-          message: 'Senha é obrigatória para novos usuários',
-          severity: 'error'
-        });
-        return;
-      }
-
-      let response;
-      if (usuarioEditando) {
-        // Editar usuário existente
-        const dadosAtualizacao = { ...formData };
-        // Se não foi informada nova senha, remover do payload
-        if (!formData.Senha) {
-          delete dadosAtualizacao.Senha;
-        }
-        
-        response = await userService.updateUser(usuarioEditando.id, dadosAtualizacao);
-      } else {
-        // Criar novo usuário
-        response = await userService.createUser(formData);
-      }
+      setLoading(true);
+      const response = await userService.toggleStatus(item.id);
       
       if (response.success) {
-        setSnackbar({
-          open: true,
-          message: response.message || `Usuário ${usuarioEditando ? 'atualizado' : 'criado'} com sucesso!`,
-          severity: 'success'
-        });
-        setModalAberto(false);
-        carregarUsuarios(); // Recarregar lista
-        carregarEstatisticas(); // Recarregar estatísticas
+        showSuccess(`Status alterado para ${response.data?.status || 'alterado'}`);
+        loadItems();
       } else {
-        setSnackbar({
-          open: true,
-          message: response.message || 'Erro ao salvar usuário',
-          severity: 'error'
-        });
+        showError(response.message || 'Erro ao alterar status');
       }
-    } catch (err) {
-      setSnackbar({
-        open: true,
-        message: 'Erro inesperado ao salvar usuário',
-        severity: 'error'
-      });
-      console.error('Erro ao salvar usuário:', err);
+    } catch (error) {
+      showError('Erro ao alterar status');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleChangePassword = (item) => {
+    setPasswordDialog({ open: true, item });
+  };
+  
+  const handleSavePassword = async (password) => {
+    try {
+      setFormLoading(true);
+      const response = await userService.changePassword(passwordDialog.item.id, password);
+      
+      if (response.success) {
+        showSuccess('Senha alterada com sucesso!');
+        setPasswordDialog({ open: false, item: null });
+      } else {
+        showError(response.message || 'Erro ao alterar senha');
+      }
+    } catch (error) {
+      showError('Erro ao alterar senha');
     } finally {
       setFormLoading(false);
     }
   };
 
-  // Função para excluir usuário
-  const handleExcluir = (usuario) => {
-    setUsuarioToDelete(usuario);
-    setDeleteDialogOpen(true);
-  };
-
-  const cancelDelete = () => {
-    setDeleteDialogOpen(false);
-    setUsuarioToDelete(null);
-  };
-
-  const confirmDelete = async () => {
-    if (!usuarioToDelete) return;
-    
+  const handleModalSave = async () => {
     try {
-      const response = await userService.deleteUser(usuarioToDelete.id);
+      setFormLoading(true);
+      const data = {
+        name: formData.name,
+        username: formData.username,
+        email: formData.email,
+        roles: formData.roles
+      };
+      
+      if (!editingItem && formData.password) {
+        data.password = formData.password;
+      }
+      
+      let response;
+      if (editingItem) {
+        response = await userService.update(editingItem.id, data);
+      } else {
+        response = await userService.create(data);
+      }
       
       if (response.success) {
-        setSnackbar({
-          open: true,
-          message: response.message || 'Usuário excluído com sucesso!',
-          severity: 'success'
-        });
-        carregarUsuarios(); // Recarregar lista
-        carregarEstatisticas(); // Recarregar estatísticas
-        setDeleteDialogOpen(false);
-        setUsuarioToDelete(null);
+        showSuccess(editingItem ? 'Usuário atualizado com sucesso!' : 'Usuário criado com sucesso!');
+        setModalOpen(false);
+        setEditingItem(null);
+        loadItems();
       } else {
-        setSnackbar({
-          open: true,
-          message: response.message || 'Erro ao excluir usuário',
-          severity: 'error'
-        });
+        showError(response.message || 'Erro ao salvar usuário');
       }
-    } catch (err) {
-      setSnackbar({
-        open: true,
-        message: 'Erro inesperado ao excluir usuário',
-        severity: 'error'
-      });
-      console.error('Erro ao excluir usuário:', err);
+    } catch (error) {
+      showError('Erro ao salvar usuário');
+    } finally {
+      setFormLoading(false);
     }
   };
-
-  // Função para alternar status do usuário
-  const handleToggleStatus = async (usuario) => {
+  
+  const handleConfirmDelete = async () => {
     try {
-      const response = await userService.toggleUserStatus(usuario.id);
+      setLoading(true);
+      const response = await userService.delete(deleteDialog.item.id);
       
       if (response.success) {
-        setSnackbar({
-          open: true,
-          message: response.message || `Usuário ${usuario.status === 'ativo' ? 'desativado' : 'ativado'} com sucesso!`,
-          severity: 'success'
-        });
-        carregarUsuarios(); // Recarregar lista
-        carregarEstatisticas(); // Recarregar estatísticas
+        showSuccess('Usuário excluído com sucesso!');
+        setDeleteDialog({ open: false, item: null });
+        loadItems();
       } else {
-        setSnackbar({
-          open: true,
-          message: response.message || 'Erro ao alterar status do usuário',
-          severity: 'error'
-        });
+        showError(response.message || 'Erro ao excluir usuário');
       }
-    } catch (err) {
-      setSnackbar({
-        open: true,
-        message: 'Erro inesperado ao alterar status',
-        severity: 'error'
-      });
-      console.error('Erro ao alterar status:', err);
+    } catch (error) {
+      showError('Erro ao excluir usuário');
+    } finally {
+      setLoading(false);
     }
   };
-
-  // Função para alterar permissão
-  const handlePermissaoChange = (permissao) => {
-    setFormData(prev => ({
-      ...prev,
-      permissoes: prev.permissoes.includes(permissao)
-        ? prev.permissoes.filter(p => p !== permissao)
-        : [...prev.permissoes, permissao]
-    }));
+  
+  const handlePageChange = (event, page) => {
+    setCurrentPage(page);
   };
-
-  // Função para alterar roles
-  const handleRolesChange = (event) => {
-    setFormData(prev => ({
-      ...prev,
-      roles: event.target.value
-    }));
+  
+  const handlePerPageChange = (event) => {
+    setPerPage(event.target.value);
+    setCurrentPage(1);
   };
-
-  // Função para recarregar dados
-  const handleRefresh = () => {
-    carregarUsuarios();
-    carregarEstatisticas();
+  
+  const getStatusColor = (status) => {
+    return status === 'ativo' ? 'success' : 'error';
   };
-
-  if (loading && usuarios.length === 0) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
 
   return (
-    <Box sx={{ p: 2 }}>
+    <Container maxWidth="xl" sx={{ py: 3 }}>
+      {/* Header */}
+      <Paper sx={{ p: 3, mb: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
+          <Typography variant="h4" component="h1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PersonIcon />
           Gerenciamento de Usuários
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={handleRefresh}
-            disabled={loading}
-          >
-            Atualizar
-          </Button>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={handleNovoUsuario}
-            sx={{ bgcolor: 'primary.main', '&:hover': { bgcolor: 'primary.dark' } }}
+            onClick={handleNewItem}
+            sx={{ display: { xs: 'none', sm: 'flex' } }}
           >
             Novo Usuário
           </Button>
-        </Box>
       </Box>
 
-      {/* Campo de busca */}
-      <Box sx={{ mb: 3 }}>
+        {/* Barra de busca */}
         <TextField
           fullWidth
-          placeholder="Buscar usuários por nome ou login..."
+          placeholder="Buscar usuários por nome, username ou email..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           InputProps={{
@@ -397,393 +315,393 @@ const UsuariosPage = () => {
             ),
           }}
         />
-      </Box>
+      </Paper>
 
-      {/* Cards de Estatísticas */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Total de Usuários"
-            value={statistics.total}
-            icon={<PersonIcon />}
-            color="primary.main"
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Usuários Ativos"
-            value={statistics.ativos}
-            icon={<VisibilityIcon />}
-            color="success.main"
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Usuários Inativos"
-            value={statistics.inativos}
-            icon={<VisibilityOffIcon />}
-            color="error.main"
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Administradores"
-            value={statistics.administradores}
-            icon={<AdminIcon />}
-            color="warning.main"
-          />
-        </Grid>
-      </Grid>
-
-      {/* Mensagem de erro */}
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      {/* Tabela de Usuários */}
-      <Card>
-        <CardContent>
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+      {/* Conteúdo */}
+      <Paper sx={{ p: 2 }}>
+        {loading && (!Array.isArray(usuarios) || usuarios.length === 0) ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
             </Box>
-          ) : (
-            <TableContainer component={Paper} elevation={0}>
+        ) : !Array.isArray(usuarios) || usuarios.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="h6" color="text.secondary">
+              {searchTerm ? 'Nenhum usuário encontrado' : 'Nenhum usuário cadastrado'}
+            </Typography>
+            {!searchTerm && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={handleNewItem}
+                sx={{ mt: 2 }}
+              >
+                Cadastrar Primeiro Usuário
+              </Button>
+            )}
+          </Box>
+        ) : (
+          <>
+            {/* Desktop Table */}
+            <TableContainer sx={{ display: { xs: 'none', md: 'block' } }}>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Usuário</TableCell>
-                    <TableCell>Cargo</TableCell>
+                    <TableCell>Nome</TableCell>
+                    <TableCell>Username</TableCell>
+                    <TableCell>Email</TableCell>
+                    <TableCell>Roles</TableCell>
                     <TableCell>Status</TableCell>
-                    <TableCell>Último Acesso</TableCell>
-                    <TableCell>Permissões</TableCell>
-                    <TableCell>Perfis</TableCell>
                     <TableCell align="center">Ações</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {usuarios.map((usuario) => (
-                    <TableRow key={usuario.id}>
+                  {(Array.isArray(usuarios) ? usuarios : []).map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{item.nome}</TableCell>
+                      <TableCell>{item.username}</TableCell>
+                      <TableCell>{item.email}</TableCell>
                       <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <Avatar sx={{ mr: 2, bgcolor: 'primary.main' }}>
-                            {usuario.nome ? usuario.nome.charAt(0).toUpperCase() : '?'}
-                          </Avatar>
-                          <Box>
-                            <Typography variant="subtitle2">
-                              {usuario.nome}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {usuario.Usuario}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {usuario.email}
-                            </Typography>
-                          </Box>
+                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                          {(item.roles || []).map((role) => (
+                            <Chip
+                              key={role.id}
+                              label={role.name}
+                              size="small"
+                              variant="outlined"
+                            />
+                          ))}
                         </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {usuario.cargo || 'Não informado'}
-                        </Typography>
                       </TableCell>
                       <TableCell>
                         <Chip 
-                          label={usuario.status === 'ativo' ? 'Ativo' : 'Inativo'}
-                          color={usuario.status === 'ativo' ? 'success' : 'error'}
+                          label={item.status || 'ativo'}
+                          color={getStatusColor(item.status)}
                           size="small"
                         />
                       </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {usuario.ultimo_acesso 
-                            ? new Date(usuario.ultimo_acesso).toLocaleDateString('pt-BR')
-                            : 'Nunca'
-                          }
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                          {usuario.permissoes && usuario.permissoes.length > 0 ? (
-                            usuario.permissoes.map((permissao) => (
-                              <Chip
-                                key={permissao}
-                                label={permissoesDisponiveis.find(p => p.key === permissao)?.label || permissao}
-                                size="small"
-                                color="primary"
-                                variant="outlined"
-                              />
-                            ))
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              Nenhuma
-                            </Typography>
-                          )}
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                          {usuario.roles && usuario.roles.length > 0 ? (
-                            usuario.roles.map((role) => (
-                              <Chip
-                                key={role}
-                                label={role}
-                                size="small"
-                                color="secondary"
-                                variant="filled"
-                              />
-                            ))
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              Nenhum
-                            </Typography>
-                          )}
-                        </Box>
-                      </TableCell>
                       <TableCell align="center">
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Tooltip title="Editar">
+                        <IconButton
+                          edge="end"
+                          aria-label="alterar status"
+                          color={item.status === 'ativo' ? 'error' : 'success'}
+                          onClick={() => handleToggleStatus(item)}
+                          sx={{ mr: 1 }}
+                          disabled={loading}
+                        >
+                          {item.status === 'ativo' ? <BlockIcon /> : <CheckCircleIcon />}
+                        </IconButton>
+                        <IconButton
+                          edge="end"
+                          aria-label="alterar senha"
+                          color="primary"
+                          onClick={() => handleChangePassword(item)}
+                          sx={{ mr: 1 }}
+                        >
+                          <VpnKeyIcon />
+                        </IconButton>
                             <IconButton 
                               edge="end"
                               aria-label="editar"
-                              onClick={() => handleEditarUsuario(usuario)}
                               color="primary"
+                          onClick={() => handleEditItem(item)}
                               sx={{ mr: 1 }}
                             >
                               <EditIcon />
                             </IconButton>
-                          </Tooltip>
-                          <Tooltip title={usuario.status === 'ativo' ? 'Desativar' : 'Ativar'}>
-                            <IconButton 
-                              edge="end"
-                              aria-label={usuario.status === 'ativo' ? 'desativar' : 'ativar'}
-                              onClick={() => handleToggleStatus(usuario)}
-                            >
-                              {usuario.status === 'ativo' ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Excluir">
                             <IconButton 
                               edge="end"
                               aria-label="deletar"
                               color="error"
-                              onClick={() => handleExcluir(usuario)}
+                          onClick={() => handleDeleteItem(item)}
                             >
                               <DeleteIcon />
                             </IconButton>
-                          </Tooltip>
-                        </Box>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </TableContainer>
-          )}
+
+            {/* Mobile Cards */}
+            <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+              {(Array.isArray(usuarios) ? usuarios : []).map((item) => (
+                <Card key={item.id} sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" component="div">
+                      {item.nome}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {item.username} • {item.email}
+                    </Typography>
+                    <Box sx={{ mt: 1, mb: 1, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                      {(item.roles || []).map((role) => (
+                        <Chip key={role.id} label={role.name} size="small" variant="outlined" />
+                      ))}
+                    </Box>
+                    <Chip
+                      label={item.status || 'ativo'}
+                      color={getStatusColor(item.status)}
+                      size="small"
+                      sx={{ mb: 1 }}
+                    />
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
+                      <IconButton size="small" onClick={() => handleToggleStatus(item)}>
+                        {item.status === 'ativo' ? <BlockIcon /> : <CheckCircleIcon />}
+                      </IconButton>
+                      <IconButton size="small" onClick={() => handleChangePassword(item)}>
+                        <VpnKeyIcon />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => handleEditItem(item)}>
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton size="small" color="error" onClick={() => handleDeleteItem(item)}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
         </CardContent>
       </Card>
+              ))}
+            </Box>
+          </>
+        )}
 
-      {/* Modal de Criação/Edição */}
-      <Dialog 
-        open={modalAberto} 
-        onClose={() => setModalAberto(false)}
-        maxWidth="md"
-        fullWidth
+        {/* Paginação */}
+        {Array.isArray(usuarios) && usuarios.length > 0 && (
+          <Box sx={{ 
+            mt: 3, 
+            display: 'flex', 
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'space-between', 
+            alignItems: { xs: 'stretch', sm: 'center' },
+            gap: 2 
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Mostrando {paginationInfo.from || 0} a {paginationInfo.to || 0} de {totalItems} usuários
+              </Typography>
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel>Por página</InputLabel>
+                <Select value={perPage} label="Por página" onChange={handlePerPageChange}>
+                  <MenuItem value={5}>5</MenuItem>
+                  <MenuItem value={10}>10</MenuItem>
+                  <MenuItem value={25}>25</MenuItem>
+                  <MenuItem value={50}>50</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            <Pagination
+              count={totalPages}
+              page={currentPage}
+              onChange={handlePageChange}
+              color="primary"
+              showFirstButton
+              showLastButton
+              disabled={loading}
+            />
+          </Box>
+        )}
+      </Paper>
+
+      {/* FAB para mobile */}
+      <Fab
+        color="primary"
+        aria-label="add"
+        onClick={handleNewItem}
+        sx={{ 
+          position: 'fixed', 
+          bottom: 16, 
+          right: 16,
+          display: { xs: 'flex', sm: 'none' }
+        }}
       >
+        <AddIcon />
+      </Fab>
+
+      {/* Modal de edição/criação */}
+      <Dialog open={modalOpen} onClose={() => setModalOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {usuarioEditando ? 'Editar Usuário' : 'Novo Usuário'}
+          {editingItem ? 'Editar Usuário' : 'Novo Usuário'}
         </DialogTitle>
         <DialogContent>
-          <Grid container spacing={3} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
+          <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
               <TextField
+              label="Nome"
                 fullWidth
-                label="Nome Completo"
-                value={formData.nome}
-                onChange={(e) => setFormData(prev => ({ ...prev, nome: e.target.value }))}
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
+              disabled={formLoading}
               />
-            </Grid>
-            <Grid item xs={12} sm={6}>
               <TextField
+              label="Username"
                 fullWidth
-                label="Login"
-                value={formData.Usuario}
-                onChange={(e) => setFormData(prev => ({ ...prev, Usuario: e.target.value }))}
+              value={formData.username}
+              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 required
+              disabled={formLoading}
               />
-            </Grid>
-            <Grid item xs={12} sm={6}>
               <TextField
+              label="Email"
+              type="email"
                 fullWidth
-                label="E-mail"
-                type="email"
                 value={formData.email}
-                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
+              disabled={formLoading}
               />
-            </Grid>
-            <Grid item xs={12} sm={6}>
+            {!editingItem && (
               <TextField
-                fullWidth
-                label={usuarioEditando ? "Nova Senha (deixe em branco para manter a atual)" : "Senha"}
+                label="Senha"
                 type="password"
-                value={formData.Senha}
-                onChange={(e) => setFormData(prev => ({ ...prev, Senha: e.target.value }))}
-                required={!usuarioEditando}
-                helperText={usuarioEditando ? "Deixe em branco para manter a senha atual" : "Senha obrigatória para novos usuários"}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
                 fullWidth
-                label="Cargo"
-                value={formData.cargo}
-                onChange={(e) => setFormData(prev => ({ ...prev, cargo: e.target.value }))}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required
+                disabled={formLoading}
               />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.status === 'ativo'}
-                    onChange={(e) => setFormData(prev => ({ 
-                      ...prev, 
-                      status: e.target.checked ? 'ativo' : 'inativo' 
-                    }))}
-                  />
-                }
-                label="Usuário Ativo"
-              />
-            </Grid>
-            
-            <Grid item xs={12}>
+            )}
               <FormControl fullWidth>
-                <InputLabel>Perfis (Roles)</InputLabel>
+              <InputLabel>Roles</InputLabel>
                 <Select
                   multiple
                   value={formData.roles}
-                  onChange={handleRolesChange}
-                  renderValue={(selected) => selected.join(', ')}
-                  label="Perfis (Roles)"
-                >
-                  {availableRoles.map((role) => (
-                    <MenuItem key={role.name} value={role.name}>
-                      <Checkbox checked={formData.roles.indexOf(role.name) > -1} />
+                onChange={(e) => setFormData({ ...formData, roles: e.target.value })}
+                input={<OutlinedInput label="Roles" />}
+                renderValue={(selected) => (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {selected.map((value) => {
+                      const role = roles.find(r => r.id === value);
+                      return <Chip key={value} label={role?.name || value} size="small" />;
+                    })}
+                  </Box>
+                )}
+                disabled={formLoading}
+              >
+                {Array.isArray(roles) && roles.length > 0 ? (
+                  roles.map((role) => (
+                    <MenuItem key={role.id} value={role.id}>
+                      <Checkbox checked={formData.roles.indexOf(role.id) > -1} />
                       <ListItemText primary={role.name} />
                     </MenuItem>
-                  ))}
+                  ))
+                ) : (
+                  <MenuItem disabled>
+                    <ListItemText primary="Carregando roles..." />
+                  </MenuItem>
+                )}
                 </Select>
               </FormControl>
-            </Grid>
-            
-            <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-                Permissões de Acesso
-              </Typography>
-              <Typography variant="body2" color="text.secondary" paragraph>
-                Selecione quais funcionalidades este usuário pode acessar:
-              </Typography>
-            </Grid>
-
-            <Grid item xs={12}>
-              <Grid container spacing={2}>
-                {permissoesDisponiveis.map((permissao) => (
-                  <Grid item xs={12} sm={6} md={4} key={permissao.key}>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={formData.permissoes.includes(permissao.key)}
-                          onChange={() => handlePermissaoChange(permissao.key)}
-                        />
-                      }
-                      label={permissao.label}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            </Grid>
-          </Grid>
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setModalAberto(false)}>
+          <Button onClick={() => setModalOpen(false)} disabled={formLoading}>
             Cancelar
           </Button>
-          <Button 
-            onClick={handleSalvar} 
-            variant="contained"
-            disabled={formLoading || !formData.nome || !formData.Usuario || !formData.email || (!usuarioEditando && !formData.Senha)}
-          >
-            {formLoading ? <CircularProgress size={20} /> : (usuarioEditando ? 'Atualizar' : 'Criar')} Usuário
+          <Button onClick={handleModalSave} variant="contained" disabled={formLoading}>
+            {formLoading ? <CircularProgress size={20} /> : (editingItem ? 'Atualizar' : 'Criar')}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar para feedback */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-      >
-        <Alert 
-          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} 
-          severity={snackbar.severity}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-
-      {/* Dialog de Confirmação de Exclusão */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={cancelDelete}
-        aria-labelledby="delete-dialog-title"
-        BackdropProps={{
-          sx: {
-            backdropFilter: 'blur(15px)',
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            WebkitBackdropFilter: 'blur(15px)'
-          }
-        }}
-      >
-        <DialogTitle id="delete-dialog-title">
-          Confirmar Exclusão
-        </DialogTitle>
+      {/* Dialog de confirmação de exclusão */}
+      <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, item: null })}>
+        <DialogTitle>Confirmar Exclusão</DialogTitle>
         <DialogContent>
           <Typography>
-            Tem certeza que deseja deletar o usuário "{usuarioToDelete?.nome}"? 
+            Tem certeza que deseja deletar o usuário "{deleteDialog.item?.nome}"? 
             Esta ação não pode ser desfeita.
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button 
-            onClick={cancelDelete} 
-            variant="contained" 
-            color="error"
-          >
-            NÃO
+          <Button onClick={() => setDeleteDialog({ open: false, item: null })}>
+            Cancelar
           </Button>
-          <Button 
-            onClick={confirmDelete} 
-            variant="outlined" 
-            sx={{ 
-              color: 'grey.600',
-              borderColor: 'grey.400',
-              '&:hover': {
-                borderColor: 'grey.500',
-                backgroundColor: 'grey.50'
-              }
-            }}
-          >
+          <Button onClick={handleConfirmDelete} color="error" variant="contained" disabled={loading}>
             Deletar
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Dialog de alteração de senha */}
+      <Dialog open={passwordDialog.open} onClose={() => setPasswordDialog({ open: false, item: null })}>
+        <DialogTitle>Alterar Senha</DialogTitle>
+        <DialogContent>
+          <PasswordChangeForm
+            onSubmit={handleSavePassword}
+            loading={formLoading}
+            userName={passwordDialog.item?.nome}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Notificação */}
+      <EnhancedNotification
+        open={notification.open}
+        onClose={hideNotification}
+        message={notification.message}
+        severity={notification.severity}
+        duration={notification.duration}
+        position={{ vertical: 'top', horizontal: 'center' }}
+      />
+    </Container>
+  );
+};
+
+// Componente para formulário de alteração de senha
+const PasswordChangeForm = ({ onSubmit, loading, userName }) => {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!password || password.length < 6) {
+      setError('A senha deve ter no mínimo 6 caracteres');
+      return;
+    }
+    
+    if (password !== confirmPassword) {
+      setError('As senhas não coincidem');
+      return;
+    }
+    
+    setError('');
+    onSubmit(password);
+  };
+
+  return (
+    <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Alterar senha de: <strong>{userName}</strong>
+      </Typography>
+      <TextField
+        label="Nova Senha"
+        type="password"
+        fullWidth
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        required
+        disabled={loading}
+        sx={{ mb: 2 }}
+      />
+      <TextField
+        label="Confirmar Senha"
+        type="password"
+        fullWidth
+        value={confirmPassword}
+        onChange={(e) => setConfirmPassword(e.target.value)}
+        required
+        disabled={loading}
+        error={!!error}
+        helperText={error}
+      />
+      <DialogActions sx={{ px: 0, pb: 0, pt: 2 }}>
+        <Button type="submit" variant="contained" disabled={loading}>
+          {loading ? <CircularProgress size={20} /> : 'Alterar Senha'}
+        </Button>
+      </DialogActions>
     </Box>
   );
 };

@@ -80,6 +80,8 @@ $routes = [
     // Funcionalidades específicas de Usuários
     'usuarios/roles' => 'endpoints/usuarios-roles.php',
     'usuarios/statistics' => 'endpoints/usuarios-statistics.php',
+    'usuarios-toggle-status' => 'endpoints/usuarios-toggle-status.php',
+    'usuarios-change-password' => 'endpoints/usuarios-change-password.php',
     
     // Funcionalidades específicas de Financeiro
     'financeiro/entrada' => 'endpoints/financeiro-by-entrada.php',
@@ -91,6 +93,9 @@ $routes = [
     // Rota pública de PDF
     'pdfs/view' => 'endpoints/pdfs-view.php',
 ];
+
+// Debug: log do path processado (remover em produção)
+// logSimples('Route Debug', ['path' => $path, 'method' => $method, 'exists' => isset($routes[$path])]);
 
 // Verificar se a rota existe
 if (!isset($routes[$path])) {
@@ -113,11 +118,11 @@ if (!isset($routes[$path])) {
     } elseif (preg_match('/^usuarios\/(\d+)\/toggle-status$/', $path, $matches)) {
         $usuario_id = $matches[1];
         $endpoint_file = 'endpoints/usuarios-toggle-status.php';
-        $_GET['usuario_id'] = $usuario_id;
+        $_GET['id'] = $usuario_id;
     } elseif (preg_match('/^usuarios\/(\d+)\/change-password$/', $path, $matches)) {
         $usuario_id = $matches[1];
         $endpoint_file = 'endpoints/usuarios-change-password.php';
-        $_GET['usuario_id'] = $usuario_id;
+        $_GET['id'] = $usuario_id;
     } elseif (preg_match('/^financeiro\/entrada\/(\d+)$/', $path, $matches)) {
         $entrada_id = $matches[1];
         $endpoint_file = 'endpoints/financeiro-by-entrada.php';

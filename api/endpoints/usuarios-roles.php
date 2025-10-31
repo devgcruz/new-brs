@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 // Verificar autenticação e permissão
-$usuario = middlewarePermissao('usuarios');
+$usuario = middlewarePermissao('gerenciar-usuarios');
 
 try {
     // Buscar roles na tabela roles (se existir) ou usar roles fixos

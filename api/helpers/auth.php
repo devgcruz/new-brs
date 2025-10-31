@@ -102,14 +102,63 @@ function gerarToken($usuarioId) {
  * Verificar permissão do usuário
  */
 function verificarPermissao($usuario, $permissao) {
-    // Se for administrador, dar acesso total
+    global $pdo;
+    
+    // Se for administrador (via nível), dar acesso total
     if ($usuario['nivel'] === 'Administrador') {
         return true;
     }
     
-    // Verificar permissões específicas
+    // Buscar roles do usuário
+    $roles = [];
+    try {
+        $roles_sql = "
+            SELECT r.name 
+            FROM roles r
+            INNER JOIN model_has_roles mhr ON r.id = mhr.role_id
+            WHERE mhr.model_id = :user_id 
+            AND (mhr.model_type = :model_type1 OR mhr.model_type = :model_type2 OR mhr.model_type = :model_type3)
+        ";
+        $roles_stmt = $pdo->prepare($roles_sql);
+        $roles_stmt->execute([
+            'user_id' => $usuario['id'],
+            'model_type1' => 'App\Models\User',
+            'model_type2' => 'App\\Models\\User',
+            'model_type3' => 'User'
+        ]);
+        $roles = $roles_stmt->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Exception $e) {
+        // Se não existir tabela roles, continuar sem roles
+    }
+    
+    // Se for administrador (via role), dar acesso total
+    if (in_array('Administrador', $roles)) {
+        return true;
+    }
+    
+    // Mapeamento de roles para permissões específicas
+    $rolePermissionMap = [
+        'Administrador' => ['dashboard', 'registros', 'relatorios', 'gerenciar-usuarios', 'usuarios'],
+        'Analista' => ['dashboard', 'registros', 'relatorios'],
+        'Operador' => ['dashboard', 'registros'],
+        'Visualizador' => ['dashboard']
+    ];
+    
+    // Verificar se algum role do usuário tem a permissão
+    foreach ($roles as $roleName) {
+        $rolePerms = $rolePermissionMap[$roleName] ?? [];
+        if (in_array($permissao, $rolePerms)) {
+            return true;
+        }
+    }
+    
+    // Verificar permissões específicas no campo JSON do banco
     $permissoes = json_decode($usuario['permissoes'] ?? '[]', true);
-    return in_array($permissao, $permissoes);
+    if (is_array($permissoes) && in_array($permissao, $permissoes)) {
+        return true;
+    }
+    
+    return false;
 }
 
 /**

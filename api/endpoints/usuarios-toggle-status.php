@@ -3,8 +3,8 @@
 // Incluir configuração CORS centralizada
 require_once __DIR__ . '/../config/cors.php';
 /**
- * Endpoint: PATCH /usuarios/{id}/toggle-status
- * Ativar/desativar usuário
+ * Endpoint: POST /usuarios-toggle-status
+ * Alternar status do usuário (ativo/inativo)
  */
 
 // Definir o diretório base da API se não estiver definido
@@ -17,69 +17,55 @@ require_once API_BASE_DIR . "/middleware/auth.php";
 require_once API_BASE_DIR . "/helpers/auth.php";
 
 // Verificar método HTTP
-if ($_SERVER['REQUEST_METHOD'] !== 'PATCH') {
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     respostaJson(false, null, 'Método não permitido', 405);
 }
 
 // Verificar autenticação e permissão
-$usuario = middlewarePermissao('usuarios');
+$usuario = middlewarePermissao('gerenciar-usuarios');
 
 try {
-    // Obter ID do usuário da URL
-    $usuario_id = $_GET['usuario_id'] ?? '';
+    $input = file_get_contents('php://input');
+    $data = json_decode($input, true);
     
-    if (!is_numeric($usuario_id)) {
-        respostaJson(false, null, 'ID do usuário inválido', 400);
+    $id = $data['id'] ?? $_POST['id'] ?? '';
+    
+    if (empty($id)) {
+        respostaJson(false, null, 'ID do usuário não especificado', 400);
     }
     
-    // Buscar usuário
-    $stmt = $pdo->prepare("SELECT id, nome, Usuario, status FROM usuarios WHERE id = :id LIMIT 1");
-    $stmt->execute(['id' => $usuario_id]);
-    $usuario_alvo = $stmt->fetch(PDO::FETCH_ASSOC);
+    // Verificar se usuário existe
+    $check_stmt = $pdo->prepare("SELECT id, status FROM usuarios WHERE id = :id");
+    $check_stmt->execute(['id' => $id]);
+    $usuario_atual = $check_stmt->fetch();
     
-    if (!$usuario_alvo) {
+    if (!$usuario_atual) {
         respostaJson(false, null, 'Usuário não encontrado', 404);
     }
     
-    // Não permitir alterar o próprio status
-    if ($usuario_alvo['id'] == $usuario['id']) {
-        respostaJson(false, null, 'Você não pode alterar seu próprio status', 400);
+    // Não permitir desativar a si mesmo
+    if ($id == $usuario['id']) {
+        respostaJson(false, null, 'Não é possível alterar seu próprio status', 400);
     }
     
-    // Determinar novo status
-    $status_atual = $usuario_alvo['status'];
-    $novo_status = ($status_atual === 'ativo') ? 'inativo' : 'ativo';
+    // Alternar status
+    $novo_status = ($usuario_atual['status'] === 'ativo') ? 'inativo' : 'ativo';
     
-    // Atualizar status
-    $stmt = $pdo->prepare("UPDATE usuarios SET status = :status WHERE id = :id");
+    $stmt = $pdo->prepare("UPDATE usuarios SET status = :status, updated_at = NOW() WHERE id = :id");
     $stmt->execute([
         'status' => $novo_status,
-        'id' => $usuario_id
+        'id' => $id
     ]);
     
-    // Log da alteração
-    logSimples('usuario_toggle_status', [
-        'usuario_id' => $usuario_id,
-        'usuario_nome' => $usuario_alvo['nome'],
-        'status_anterior' => $status_atual,
-        'status_novo' => $novo_status,
-        'alterado_por' => $usuario['Usuario']
+    logSimples('✅ Status do usuário alterado', [
+        'usuario_id' => $id,
+        'novo_status' => $novo_status,
+        'usuario' => $usuario['Usuario']
     ]);
     
-    respostaJson(true, [
-        'id' => $usuario_alvo['id'],
-        'nome' => $usuario_alvo['nome'],
-        'usuario' => $usuario_alvo['Usuario'],
-        'status' => $novo_status,
-        'status_anterior' => $status_atual
-    ], "Status do usuário alterado para {$novo_status}");
+    respostaJson(true, ['status' => $novo_status], 'Status alterado com sucesso');
     
 } catch (Exception $e) {
-    logSimples('error', [
-        'endpoint' => 'usuarios-toggle-status',
-        'erro' => $e->getMessage(),
-        'usuario' => $usuario['Usuario'] ?? 'N/A'
-    ]);
-    
+    logSimples('❌ Erro ao alterar status', ['erro' => $e->getMessage()]);
     respostaJson(false, null, 'Erro ao alterar status: ' . $e->getMessage(), 500);
 }

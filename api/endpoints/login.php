@@ -69,6 +69,29 @@ try {
     
     logSimples('✅ Login bem-sucedido', ['usuario' => $usuario, 'token' => substr($token, 0, 20) . '...']);
     
+    // Buscar roles do usuário
+    $roles = [];
+    try {
+        $roles_sql = "
+            SELECT r.id, r.name 
+            FROM roles r
+            INNER JOIN model_has_roles mhr ON r.id = mhr.role_id
+            WHERE mhr.model_id = :user_id 
+            AND (mhr.model_type = :model_type1 OR mhr.model_type = :model_type2 OR mhr.model_type = :model_type3)
+        ";
+        $roles_stmt = $pdo->prepare($roles_sql);
+        $roles_stmt->execute([
+            'user_id' => $user['id'],
+            'model_type1' => 'App\Models\User',
+            'model_type2' => 'App\\Models\\User',
+            'model_type3' => 'User'
+        ]);
+        $roles = $roles_stmt->fetchAll();
+    } catch (Exception $e) {
+        // Se não existir tabela roles, continuar sem roles
+        logSimples('⚠️ Erro ao buscar roles', ['erro' => $e->getMessage()]);
+    }
+    
     // Retornar dados do usuário (sem senha)
     unset($user['Senha']);
     unset($user['token']);
@@ -81,6 +104,7 @@ try {
             'email' => $user['email'],
             'nivel' => $user['nivel'],
             'permissoes' => json_decode($user['permissoes'] ?? '[]', true),
+            'roles' => array_column($roles, 'name'), // Array de nomes dos roles
             'status' => $user['status'],
             'ultimo_acesso' => $user['ultimo_acesso'],
             'profile_photo_path' => $user['profile_photo_path']

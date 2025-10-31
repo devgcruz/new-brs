@@ -27,6 +27,28 @@ if ($method !== 'GET') {
 // Verificar autenticação
 $usuario = middlewareAutenticacao();
 
+// Buscar roles do usuário
+$roles = [];
+try {
+    $roles_sql = "
+        SELECT r.id, r.name 
+        FROM roles r
+        INNER JOIN model_has_roles mhr ON r.id = mhr.role_id
+        WHERE mhr.model_id = :user_id 
+        AND (mhr.model_type = :model_type1 OR mhr.model_type = :model_type2 OR mhr.model_type = :model_type3)
+    ";
+    $roles_stmt = $pdo->prepare($roles_sql);
+    $roles_stmt->execute([
+        'user_id' => $usuario['id'],
+        'model_type1' => 'App\Models\User',
+        'model_type2' => 'App\\Models\\User',
+        'model_type3' => 'User'
+    ]);
+    $roles = $roles_stmt->fetchAll();
+} catch (Exception $e) {
+    // Se não existir tabela roles, continuar sem roles
+}
+
 // Retornar dados do usuário (sem senha e token)
 unset($usuario['Senha']);
 unset($usuario['token']);
@@ -38,6 +60,7 @@ respostaJson(true, [
     'email' => $usuario['email'],
     'nivel' => $usuario['nivel'],
     'permissoes' => json_decode($usuario['permissoes'] ?? '[]', true),
+    'roles' => array_column($roles, 'name'), // Array de nomes dos roles
     'status' => $usuario['status'],
     'ultimo_acesso' => $usuario['ultimo_acesso'],
     'profile_photo_path' => $usuario['profile_photo_path']

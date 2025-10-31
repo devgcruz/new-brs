@@ -1,144 +1,56 @@
 // Importar configuração da API
-import { API_CONFIG } from '../config/api.js';
-const API_BASE_URL = API_CONFIG.BASE_URL;
+import { makeRequest } from '../config/api';
 
-// Função para fazer requisições autenticadas
-const makeAuthenticatedRequest = async (url, options = {}) => {
-  const token = localStorage.getItem('auth_token');
-  
-  const defaultOptions = {
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` })
-    }
-  };
-
-  const response = await fetch(`${API_BASE_URL}${url}`, {
-    ...defaultOptions,
-    ...options,
-    headers: { ...defaultOptions.headers, ...options.headers }
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      // Token inválido, redirecionar para login
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('user_data');
-      window.location.href = '/login';
-      throw new Error('Sessão expirada');
-    }
-    throw new Error(`Erro ${response.status}: ${response.statusText}`);
-  }
-
-  return response.json();
-};
-
-// Serviço para gerenciamento de usuários integrado com a API
-class UserService {
-  constructor() {
-    this.currentUser = this.loadCurrentUser();
-  }
-
-  // Carregar usuário atual do localStorage
-  loadCurrentUser() {
-    try {
-      const userData = localStorage.getItem('user_data');
-      if (userData) {
-        return JSON.parse(userData);
-      }
-    } catch (error) {
-      console.error('Erro ao carregar usuário atual:', error);
-    }
-    return null;
-  }
-
-  // Fazer logout
-  logout() {
-    this.currentUser = null;
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user_data');
-  }
-
-  // Verificar se usuário tem permissão
-  hasPermission(permission) {
-    if (!this.currentUser) {
-      this.currentUser = this.loadCurrentUser();
-    }
-    
-    if (!this.currentUser) return false;
-    
-    // Se for administrador, dar acesso total
-    if (this.isAdmin()) {
-      return true;
-    }
-    
-    // Verificar permissões específicas
-    return this.currentUser.permissoes && this.currentUser.permissoes.includes(permission);
-  }
-
-  // Verificar se usuário é administrador
-  isAdmin() {
-    if (!this.currentUser) return false;
-    
-    // Verificar se o usuário tem o role 'Administrador'
-    return this.currentUser.roles && this.currentUser.roles.includes('Administrador');
-  }
-
-  // Obter todos os usuários
-  async getAllUsers(filtros = {}) {
+const userService = {
+  /**
+   * Obter todos os usuários com paginação e busca
+   * @param {number} page - Página atual (padrão: 1)
+   * @param {number} pageSize - Itens por página (padrão: 10)
+   * @param {string} search - Termo de busca (padrão: '')
+   * @returns {Promise<Object>} Resposta da API
+   */
+  async getAll(page = 1, pageSize = 10, search = '') {
     try {
       const queryParams = new URLSearchParams();
-      
-      if (filtros && typeof filtros === 'object') {
-        Object.keys(filtros).forEach(key => {
-          if (filtros[key] !== null && filtros[key] !== undefined && filtros[key] !== '') {
-            queryParams.append(key, filtros[key]);
-          }
-        });
-      }
+      if (page) queryParams.append('page', page);
+      if (pageSize) queryParams.append('pageSize', pageSize);
+      if (search) queryParams.append('search', search);
 
       const url = `/usuarios${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-      const response = await makeAuthenticatedRequest(url);
+      const response = await makeRequest(url, {
+        method: 'GET'
+      });
+      
+      // Garantir que data seja sempre um array
+      const data = response.data || [];
+      const usuariosArray = Array.isArray(data) ? data : (data?.data || []);
       
       return {
         success: response.success,
-        data: response.data,
-        meta: response.meta
+        data: usuariosArray,
+        meta: response.meta || {}
       };
     } catch (error) {
       console.error('Erro ao buscar usuários:', error);
       return {
         success: false,
         message: error.message,
-        data: []
+        data: [],
+        meta: {}
       };
     }
-  }
+  },
 
-  // Obter usuário por ID
-  async getUserById(id) {
+  /**
+   * Criar novo usuário
+   * @param {Object} data - Dados do usuário {name, username, email, password, roles}
+   * @returns {Promise<Object>} Resposta da API
+   */
+  async create(data) {
     try {
-      const response = await makeAuthenticatedRequest(`/usuarios/${id}`);
-      return {
-        success: response.success,
-        data: response.data
-      };
-    } catch (error) {
-      console.error('Erro ao buscar usuário:', error);
-      return {
-        success: false,
-        message: error.message
-      };
-    }
-  }
-
-  // Criar novo usuário
-  async createUser(userData) {
-    try {
-      const response = await makeAuthenticatedRequest('/usuarios', {
+      const response = await makeRequest('/usuarios', {
         method: 'POST',
-        body: JSON.stringify(userData)
+        body: data
       });
       
       return {
@@ -150,17 +62,22 @@ class UserService {
       console.error('Erro ao criar usuário:', error);
       return {
         success: false,
-        message: error.message
+        message: error.message || 'Erro ao criar usuário'
       };
     }
-  }
+  },
 
-  // Atualizar usuário
-  async updateUser(id, userData) {
+  /**
+   * Atualizar usuário existente
+   * @param {number} id - ID do usuário
+   * @param {Object} data - Dados do usuário {name, username, email, roles}
+   * @returns {Promise<Object>} Resposta da API
+   */
+  async update(id, data) {
     try {
-      const response = await makeAuthenticatedRequest(`/usuarios/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(userData)
+      const response = await makeRequest(`/usuarios?id=${id}`, {
+        method: 'PUT',
+        body: data
       });
       
       return {
@@ -172,15 +89,19 @@ class UserService {
       console.error('Erro ao atualizar usuário:', error);
       return {
         success: false,
-        message: error.message
+        message: error.message || 'Erro ao atualizar usuário'
       };
     }
-  }
+  },
 
-  // Excluir usuário
-  async deleteUser(id) {
+  /**
+   * Deletar usuário
+   * @param {number} id - ID do usuário
+   * @returns {Promise<Object>} Resposta da API
+   */
+  async delete(id) {
     try {
-      const response = await makeAuthenticatedRequest(`/usuarios/${id}`, {
+      const response = await makeRequest(`/usuarios?id=${id}`, {
         method: 'DELETE'
       });
       
@@ -192,16 +113,56 @@ class UserService {
       console.error('Erro ao deletar usuário:', error);
       return {
         success: false,
-        message: error.message
+        message: error.message || 'Erro ao deletar usuário'
       };
     }
-  }
+  },
 
-  // Alterar status do usuário
-  async toggleUserStatus(id) {
+  /**
+   * Obter roles disponíveis
+   * @returns {Promise<Object>} Resposta da API com lista de roles
+   */
+  async getRoles() {
     try {
-      const response = await makeAuthenticatedRequest(`/usuarios/${id}/toggle-status`, {
-        method: 'PATCH'
+      const response = await makeRequest('/usuarios/roles');
+      
+      // respostaJson retorna: { success: true, data: [...], message: "..." }
+      // então response.data já é o array de roles
+      let rolesData = [];
+      
+      if (response && response.success) {
+        if (Array.isArray(response.data)) {
+          rolesData = response.data;
+        } else if (response.data && Array.isArray(response.data.data)) {
+          // Se estiver aninhado (caso raro)
+          rolesData = response.data.data;
+        }
+      }
+      
+      return {
+        success: true,
+        data: rolesData
+      };
+    } catch (error) {
+      console.error('Erro ao obter roles:', error);
+      return {
+        success: false,
+        message: error.message || 'Erro ao carregar roles',
+        data: []
+      };
+    }
+  },
+
+  /**
+   * Alternar status do usuário (ativo/inativo)
+   * @param {number} id - ID do usuário
+   * @returns {Promise<Object>} Resposta da API
+   */
+  async toggleStatus(id) {
+    try {
+      const response = await makeRequest('/usuarios-toggle-status', {
+        method: 'POST',
+        body: { id }
       });
       
       return {
@@ -210,102 +171,39 @@ class UserService {
         message: response.message
       };
     } catch (error) {
-      console.error('Erro ao alterar status do usuário:', error);
+      console.error('Erro ao alterar status:', error);
       return {
         success: false,
-        message: error.message
+        message: error.message || 'Erro ao alterar status'
       };
     }
-  }
+  },
 
-  // Obter estatísticas dos usuários
-  async getUserStats() {
+  /**
+   * Alterar senha do usuário
+   * @param {number} id - ID do usuário
+   * @param {string} password - Nova senha
+   * @returns {Promise<Object>} Resposta da API
+   */
+  async changePassword(id, password) {
     try {
-      const response = await makeAuthenticatedRequest('/usuarios/statistics');
-      return {
-        success: response.success,
-        data: response.data
-      };
-    } catch (error) {
-      console.error('Erro ao obter estatísticas:', error);
-      return {
-        success: false,
-        message: error.message
-      };
-    }
-  }
-
-  // Obter roles disponíveis
-  async getRoles() {
-    try {
-      const response = await makeAuthenticatedRequest('/usuarios/roles');
-      return {
-        success: response.success,
-        data: response.data
-      };
-    } catch (error) {
-      console.error('Erro ao obter roles:', error);
-      return {
-        success: false,
-        message: error.message,
-        data: []
-      };
-    }
-  }
-
-  // Atualizar perfil do usuário atual
-  async updateProfile(userData) {
-    try {
-      const response = await makeAuthenticatedRequest('/profile', {
+      const response = await makeRequest('/usuarios-change-password', {
         method: 'POST',
-        body: JSON.stringify(userData)
+        body: { id, password }
       });
       
-      // Atualizar dados do usuário atual no localStorage
-      const updatedUser = response.data;
-      localStorage.setItem('user_data', JSON.stringify(updatedUser));
-      this.currentUser = updatedUser;
-      
-      return updatedUser;
-    } catch (error) {
-      console.error('Erro ao atualizar perfil:', error);
-      throw error;
-    }
-  }
-
-  // Alterar senha do usuário atual
-  async changePassword(passwordData) {
-    try {
-      const response = await makeAuthenticatedRequest('/profile/change-password', {
-        method: 'POST',
-        body: JSON.stringify(passwordData)
-      });
-      
-      return response;
+      return {
+        success: response.success,
+        message: response.message
+      };
     } catch (error) {
       console.error('Erro ao alterar senha:', error);
-      throw error;
+      return {
+        success: false,
+        message: error.message || 'Erro ao alterar senha'
+      };
     }
   }
-
-  // Obter usuário atual
-  getCurrentUser() {
-    return this.currentUser;
-  }
-
-  // Forçar recarga do usuário atual
-  refreshCurrentUser() {
-    this.currentUser = this.loadCurrentUser();
-    return this.currentUser;
-  }
-
-  // Verificar se usuário está logado
-  isLoggedIn() {
-    return this.currentUser !== null;
-  }
-}
-
-// Instância única do serviço
-const userService = new UserService();
+};
 
 export default userService;

@@ -186,7 +186,7 @@ function App() {
           <Route path="/dashboard/usuarios" element={
             <ProtectedRoute>
               <DashboardLayout>
-                <PermissionRoute permission="usuarios">
+                <PermissionRoute permission="gerenciar-usuarios">
                   <UsuariosPage />
                 </PermissionRoute>
               </DashboardLayout>

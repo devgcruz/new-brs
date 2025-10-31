@@ -98,13 +98,39 @@ const useAuthStore = create((set, get) => ({
     
     if (!user) return false;
     
-    // Se for administrador, dar acesso total
-    if (user.roles && user.roles.includes('Administrador')) {
+    // Se for administrador (via role ou nível), dar acesso total
+    if (user.roles && Array.isArray(user.roles) && user.roles.includes('Administrador')) {
       return true;
     }
     
-    // Verificar permissões específicas
-    return user.permissoes && user.permissoes.includes(permission);
+    if (user.nivel === 'Administrador') {
+      return true;
+    }
+    
+    // Mapeamento de roles para permissões específicas
+    const rolePermissionMap = {
+      'Administrador': ['dashboard', 'registros', 'relatorios', 'gerenciar-usuarios', 'usuarios'],
+      'Analista': ['dashboard', 'registros', 'relatorios'],
+      'Operador': ['dashboard', 'registros'],
+      'Visualizador': ['dashboard']
+    };
+    
+    // Verificar se algum role do usuário tem a permissão
+    if (user.roles && Array.isArray(user.roles)) {
+      for (const roleName of user.roles) {
+        const rolePerms = rolePermissionMap[roleName];
+        if (rolePerms && rolePerms.includes(permission)) {
+          return true;
+        }
+      }
+    }
+    
+    // Verificar permissões específicas no array de permissões (campo JSON do banco)
+    if (user.permissoes && Array.isArray(user.permissoes)) {
+      return user.permissoes.includes(permission);
+    }
+    
+    return false;
   },
 
   // Verifica se usuário é administrador

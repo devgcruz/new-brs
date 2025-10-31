@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Drawer,
@@ -68,7 +68,7 @@ const gerenciarSubItems = [
     text: 'Usuários',
     icon: <UsuariosIcon />,
     path: '/dashboard/usuarios',
-    permission: 'usuarios'
+    permission: 'gerenciar-usuarios'
   },
   {
     text: 'Colaboradores',
@@ -100,8 +100,24 @@ const Sidebar = ({ open, onClose }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, hasPermission } = useAuthStore();
-  const [gerenciarExpanded, setGerenciarExpanded] = useState(false);
-  const [relatoriosExpanded, setRelatoriosExpanded] = useState(false);
+  
+  // Funções auxiliares para verificar rotas
+  const isGerenciarPath = (path) => {
+    return gerenciarSubItems.some(item => item.path === path);
+  };
+
+  const isRelatoriosPath = (path) => {
+    return relatoriosSubItems.some(item => item.path === path);
+  };
+  
+  // Expandir automaticamente se estiver em uma rota de gerenciar
+  const [gerenciarExpanded, setGerenciarExpanded] = useState(
+    () => isGerenciarPath(location.pathname)
+  );
+  // Expandir automaticamente se estiver em uma rota de relatórios
+  const [relatoriosExpanded, setRelatoriosExpanded] = useState(
+    () => isRelatoriosPath(location.pathname)
+  );
 
   const handleNavigation = (path) => {
     navigate(path);
@@ -111,7 +127,6 @@ const Sidebar = ({ open, onClose }) => {
     }
   };
 
-
   const handleGerenciarToggle = () => {
     setGerenciarExpanded(!gerenciarExpanded);
   };
@@ -119,15 +134,12 @@ const Sidebar = ({ open, onClose }) => {
   const handleRelatoriosToggle = () => {
     setRelatoriosExpanded(!relatoriosExpanded);
   };
-
-
-  const isGerenciarPath = (path) => {
-    return gerenciarSubItems.some(item => item.path === path);
-  };
-
-  const isRelatoriosPath = (path) => {
-    return relatoriosSubItems.some(item => item.path === path);
-  };
+  
+  // Atualizar estado expandido quando a rota mudar
+  useEffect(() => {
+    setGerenciarExpanded(isGerenciarPath(location.pathname));
+    setRelatoriosExpanded(isRelatoriosPath(location.pathname));
+  }, [location.pathname]);
 
   return (
     <Drawer
@@ -262,8 +274,8 @@ const Sidebar = ({ open, onClose }) => {
           </>
         )}
 
-        {/* Seção Gerenciar - Mostrar se usuário tem permissão de usuários */}
-        {hasPermission('usuarios') && (
+        {/* Seção Gerenciar - Mostrar se usuário tem permissão para pelo menos um item */}
+        {(hasPermission('gerenciar-usuarios') || hasPermission('usuarios')) && (
           <>
             <ListItem disablePadding>
               <ListItemButton onClick={handleGerenciarToggle}>
