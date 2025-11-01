@@ -39,12 +39,12 @@ import {
   Delete as DeleteIcon,
   Search as SearchIcon,
   Person as PersonIcon,
-  Visibility as VisibilityIcon,
-  Image as ImageIcon
+  Attachment as AttachmentIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import colaboradorService from '../services/colaboradorService';
 import ColaboradorModal from '../components/ColaboradorModal';
+import ColaboradorDocModal from '../components/ColaboradorDocModal';
 import useAppDataStore from '../store/appDataStore';
 
 const ColaboradoresPage = () => {
@@ -56,7 +56,8 @@ const ColaboradoresPage = () => {
   const [deleteDialog, setDeleteDialog] = useState({ open: false, colaborador: null });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingColaborador, setEditingColaborador] = useState(null);
-  const [cnhModal, setCnhModal] = useState({ open: false, colaborador: null, imageUrl: null });
+  const [docModalOpen, setDocModalOpen] = useState(false);
+  const [selectedColaborador, setSelectedColaborador] = useState(null);
 
   // Hook para acessar o store de dados
   const { invalidateColaboradoresCache } = useAppDataStore();
@@ -91,16 +92,35 @@ const ColaboradoresPage = () => {
     try {
       const response = await colaboradorService.getAll(currentPage, perPage, searchTerm);
       
-      // Atualizar dados dos colaboradores
-      setColaboradores(response.data || []);
+      // Garantir que response.data seja sempre um array
+      let colaboradoresData = [];
+      let meta = {};
+      
+      if (response && response.success) {
+        // Verificar se data é um array direto ou está aninhado em data.data
+        if (Array.isArray(response.data)) {
+          colaboradoresData = response.data;
+          meta = response.meta || {};
+        } else if (response.data && Array.isArray(response.data.data)) {
+          // Se estiver aninhado (formato paginado)
+          colaboradoresData = response.data.data;
+          meta = response.data.meta || response.meta || {};
+        } else if (response.data && typeof response.data === 'object') {
+          // Se data for um objeto, tentar extrair meta
+          meta = response.data.meta || response.meta || {};
+        }
+      }
+      
+      // Garantir que colaboradoresData seja sempre um array
+      setColaboradores(Array.isArray(colaboradoresData) ? colaboradoresData : []);
       
       // Atualizar informações de paginação
-      if (response.meta) {
-        setTotalPages(response.meta.last_page || 1);
-        setTotalItems(response.meta.total || 0);
-        setPaginationInfo(response.meta);
-      }
+      setTotalPages(meta.last_page || meta.totalPages || 1);
+      setTotalItems(meta.total || 0);
+      setPaginationInfo(meta);
     } catch (error) {
+      console.error('Erro ao carregar colaboradores:', error);
+      setColaboradores([]); // Garantir array vazio em caso de erro
       setAlert({
         show: true,
         message: 'Erro ao carregar colaboradores',
@@ -138,24 +158,16 @@ const ColaboradoresPage = () => {
     setDeleteDialog({ open: true, colaborador });
   };
 
-  // Visualizar CNH do colaborador
-  const handleViewCnh = (colaborador) => {
-    if (colaborador.cnh_path) {
-      // Construir URL completa da imagem
-      const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:80';
-      const imageUrl = `${baseUrl}/storage/${colaborador.cnh_path}`;
-      
-      setCnhModal({
-        open: true,
-        colaborador,
-        imageUrl
-      });
-    }
+  // Abrir modal de documentos do colaborador
+  const handleOpenDocModal = (colaborador) => {
+    setSelectedColaborador(colaborador);
+    setDocModalOpen(true);
   };
 
-  // Fechar modal de CNH
-  const handleCloseCnhModal = () => {
-    setCnhModal({ open: false, colaborador: null, imageUrl: null });
+  // Fechar modal de documentos
+  const handleCloseDocModal = () => {
+    setDocModalOpen(false);
+    setSelectedColaborador(null);
   };
 
   // Salvar colaborador (callback do modal)
@@ -209,9 +221,11 @@ const ColaboradoresPage = () => {
       }
     } catch (error) {
       console.error('Erro ao excluir colaborador:', error);
+      // Extrair mensagem de erro (pode vir do erro ou do response)
+      const errorMessage = error.message || (error.response?.message) || 'Erro ao excluir colaborador';
       setAlert({
         show: true,
-        message: 'Erro ao excluir colaborador',
+        message: errorMessage,
         type: 'error'
       });
     } finally {
@@ -304,8 +318,7 @@ const ColaboradoresPage = () => {
                     <TableCell>Nome</TableCell>
                     <TableCell>CPF</TableCell>
                     <TableCell>Email</TableCell>
-                    <TableCell>Celular</TableCell>
-                    <TableCell>CNH</TableCell>
+                    <TableCell>Contato</TableCell>
                     <TableCell align="center">Ações</TableCell>
                   </TableRow>
                 </TableHead>
@@ -330,27 +343,21 @@ const ColaboradoresPage = () => {
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          {colaborador.celular || 'Não informado'}
+                          {colaborador.telefone || colaborador.contato || colaborador.celular || 'Não informado'}
                         </Typography>
                       </TableCell>
-                      <TableCell>
-                        {colaborador.cnh_path ? (
-                          <Tooltip title="Visualizar CNH">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleViewCnh(colaborador)}
-                              color="primary"
-                            >
-                              <ImageIcon />
-                            </IconButton>
-                          </Tooltip>
-                        ) : (
-                          <Typography variant="body2" color="text.secondary">
-                            Não enviada
-                          </Typography>
-                        )}
-                      </TableCell>
                       <TableCell align="center">
+                        <Tooltip title="Documentos">
+                          <IconButton
+                            edge="end"
+                            aria-label="documentos"
+                            color="primary"
+                            sx={{ mr: 1 }}
+                            onClick={() => handleOpenDocModal(colaborador)}
+                          >
+                            <AttachmentIcon />
+                          </IconButton>
+                        </Tooltip>
                         <Tooltip title="Editar">
                           <IconButton
                             edge="end"
@@ -398,21 +405,19 @@ const ColaboradoresPage = () => {
                       <strong>Email:</strong> {colaborador.email || 'Não informado'}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      <strong>Celular:</strong> {colaborador.celular || 'Não informado'}
+                      <strong>Contato:</strong> {colaborador.telefone || colaborador.contato || colaborador.celular || 'Não informado'}
                     </Typography>
                     
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                      {colaborador.cnh_path && (
-                        <Tooltip title="Visualizar CNH">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleViewCnh(colaborador)}
-                            color="primary"
-                          >
-                            <ImageIcon />
-                          </IconButton>
-                        </Tooltip>
-                      )}
+                      <Tooltip title="Documentos">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleOpenDocModal(colaborador)}
+                          color="primary"
+                        >
+                          <AttachmentIcon />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Editar">
                         <IconButton
                           edge="end"
@@ -521,37 +526,12 @@ const ColaboradoresPage = () => {
         onSaved={handleColaboradorSaved}
       />
 
-      {/* Modal de visualização da CNH */}
-      <Dialog
-        open={cnhModal.open}
-        onClose={handleCloseCnhModal}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>
-          CNH - {cnhModal.colaborador?.nome}
-        </DialogTitle>
-        <DialogContent>
-          {cnhModal.imageUrl && (
-            <Box sx={{ textAlign: 'center' }}>
-              <img
-                src={cnhModal.imageUrl}
-                alt={`CNH de ${cnhModal.colaborador?.nome}`}
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: '70vh',
-                  objectFit: 'contain'
-                }}
-              />
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseCnhModal}>
-            Fechar
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Modal de documentos do colaborador */}
+      <ColaboradorDocModal
+        open={docModalOpen}
+        onClose={handleCloseDocModal}
+        idColaborador={selectedColaborador?.id}
+      />
 
       {/* Dialog de confirmação de exclusão */}
       <Dialog

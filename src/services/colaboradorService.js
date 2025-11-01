@@ -39,23 +39,16 @@ const colaboradorService = {
   // Cadastrar novo colaborador
   async create(colaboradorData) {
     try {
-      // Criar FormData para envio de dados e arquivo
-      const formData = new FormData();
+      // Filtrar campos vazios/undefined antes de enviar
+      const body = {};
+      if (colaboradorData.nome) body.nome = colaboradorData.nome;
+      if (colaboradorData.cpf) body.cpf = colaboradorData.cpf;
+      if (colaboradorData.email) body.email = colaboradorData.email;
+      if (colaboradorData.contato) body.telefone = colaboradorData.contato; // Backend espera 'telefone', frontend usa 'contato'
       
-      // Adicionar campos de texto
-      formData.append('nome', colaboradorData.nome);
-      formData.append('cpf', colaboradorData.cpf);
-      formData.append('email', colaboradorData.email);
-      formData.append('celular', colaboradorData.celular);
-      
-      // Adicionar arquivo da CNH se existir
-      if (colaboradorData.cnh_foto) {
-        formData.append('cnh_foto', colaboradorData.cnh_foto);
-      }
-
       const response = await makeRequest('/colaboradores', {
         method: 'POST',
-        body: formData
+        body
       });
       
       return response;
@@ -68,22 +61,16 @@ const colaboradorService = {
   // Atualizar colaborador
   async update(id, colaboradorData) {
     try {
-      // Sempre usar FormData para compatibilidade com arquivos
-      const formData = new FormData();
-      formData.append('nome', colaboradorData.nome);
-      formData.append('cpf', colaboradorData.cpf);
-      formData.append('email', colaboradorData.email);
-      formData.append('celular', colaboradorData.celular);
-      formData.append('_method', 'PUT'); // Laravel method spoofing
-      
-      // Adicionar arquivo da CNH se existir
-      if (colaboradorData.cnh_foto) {
-        formData.append('cnh_foto', colaboradorData.cnh_foto);
-      }
+      // Filtrar campos vazios/undefined antes de enviar
+      const body = {};
+      if (colaboradorData.nome) body.nome = colaboradorData.nome;
+      if (colaboradorData.cpf !== undefined) body.cpf = colaboradorData.cpf || '';
+      if (colaboradorData.email !== undefined) body.email = colaboradorData.email || '';
+      if (colaboradorData.contato !== undefined) body.telefone = colaboradorData.contato || ''; // Backend espera 'telefone', frontend usa 'contato'
       
       const response = await makeRequest(`/colaboradores/${id}`, {
-        method: 'POST', // Usar POST para compatibilidade com FormData
-        body: formData
+        method: 'PUT',
+        body
       });
       return response;
     } catch (error) {

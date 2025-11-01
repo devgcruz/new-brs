@@ -51,37 +51,13 @@ const colaboradorSchema = z.object({
       (val) => !val || val.length <= 255,
       'Email deve ter no máximo 255 caracteres'
     ),
-  celular: z
+  contato: z
     .string()
     .optional()
     .refine(
       (val) => !val || /^\(\d{2}\) \d{5}-\d{4}$/.test(val),
-      'Celular deve estar no formato (00) 00000-0000'
+      'Contato deve estar no formato (00) 00000-0000'
     ),
-  cnh_foto: z
-    .any()
-    .optional()
-    .refine(
-      (file) => {
-        if (!file) return true; // Arquivo é opcional
-        return file instanceof File;
-      },
-      'Arquivo inválido'
-    )
-    .refine(
-      (file) => {
-        if (!file) return true; // Arquivo é opcional
-        return ['image/jpeg', 'image/png'].includes(file.type);
-      },
-      'Apenas arquivos JPEG e PNG são aceitos'
-    )
-    .refine(
-      (file) => {
-        if (!file) return true; // Arquivo é opcional
-        return file.size <= 2 * 1024 * 1024; // 2MB
-      },
-      'Arquivo deve ter no máximo 2MB'
-    )
 });
 
 const ColaboradorModal = ({ open, onClose, colaborador, onSaved }) => {
@@ -110,8 +86,7 @@ const ColaboradorModal = ({ open, onClose, colaborador, onSaved }) => {
       nome: '',
       cpf: '',
       email: '',
-      celular: '',
-      cnh_foto: null
+      contato: ''
     }
   });
 
@@ -122,7 +97,8 @@ const ColaboradorModal = ({ open, onClose, colaborador, onSaved }) => {
         setValue('nome', colaborador.nome || '');
         setValue('cpf', colaborador.cpf || '');
         setValue('email', colaborador.email || '');
-        setValue('celular', colaborador.celular || '');
+        // Backend retorna 'telefone', frontend usa 'contato'
+        setValue('contato', colaborador.telefone || colaborador.contato || colaborador.celular || '');
       } else {
         reset();
       }
@@ -155,28 +131,19 @@ const ColaboradorModal = ({ open, onClose, colaborador, onSaved }) => {
     }
   };
 
-  // Função para aplicar máscara do celular
-  const handleCelularChange = (e) => {
+  // Função para aplicar máscara do contato
+  const handleContatoChange = (e) => {
     const value = e.target.value;
     const numbers = value.replace(/\D/g, '');
     
     if (numbers.length <= 11) {
       const formatted = numbers.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-      setValue('celular', formatted);
-      clearFieldError('celular');
-      trigger('celular');
+      setValue('contato', formatted);
+      clearFieldError('contato');
+      trigger('contato');
     }
   };
 
-  // Função para lidar com upload de arquivo
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setValue('cnh_foto', file);
-      clearFieldError('cnh_foto');
-      trigger('cnh_foto');
-    }
-  };
 
   // Função de submit do formulário
   const onSubmit = async (data) => {
@@ -324,38 +291,20 @@ const ColaboradorModal = ({ open, onClose, colaborador, onSaved }) => {
           />
 
           <TextField
-            {...register('celular')}
+            {...register('contato')}
             margin="normal"
             fullWidth
-            id="celular"
-            label="Celular"
+            id="contato"
+            label="Contato"
             autoComplete="tel"
-            onChange={handleCelularChange}
+            onChange={handleContatoChange}
             disabled={loading}
             placeholder="(00) 00000-0000"
             inputProps={{ maxLength: 15 }}
-            error={!!errors.celular || !!validationErrors.celular}
-            helperText={errors.celular?.message || validationErrors.celular?.[0]}
+            error={!!errors.contato || !!validationErrors.contato}
+            helperText={errors.contato?.message || validationErrors.contato?.[0]}
           />
 
-          <Box sx={{ mt: 2, mb: 1 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              Foto da CNH (Opcional)
-            </Typography>
-            <TextField
-              id="cnh_foto"
-              type="file"
-              accept="image/jpeg,image/png"
-              onChange={handleFileChange}
-              disabled={loading}
-              fullWidth
-              error={!!errors.cnh_foto || !!validationErrors.cnh_foto}
-              helperText={errors.cnh_foto?.message || validationErrors.cnh_foto?.[0] || 'Formatos aceitos: JPEG, PNG. Tamanho máximo: 2MB'}
-              inputProps={{
-                'aria-label': 'Foto da CNH'
-              }}
-            />
-          </Box>
         </Box>
       </DialogContent>
 

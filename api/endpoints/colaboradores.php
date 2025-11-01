@@ -16,6 +16,7 @@ header("Content-Type: application/json");
 
 
 require_once API_BASE_DIR . "/config/db.php";
+require_once API_BASE_DIR . "/config/table-mapping.php";
 require_once API_BASE_DIR . "/middleware/auth.php";
 require_once API_BASE_DIR . "/helpers/auth.php";
 
@@ -211,7 +212,8 @@ switch ($method) {
             }
             
             // Verificar se está sendo usado em entradas
-            $usage_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM entradas WHERE ID_COLABORADOR = :id");
+            $entradas_table = getTableName('entradas');
+            $usage_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM $entradas_table WHERE ID_COLABORADOR = :id");
             $usage_stmt->execute(['id' => $colaborador_id]);
             $usage = $usage_stmt->fetch()['count'];
             

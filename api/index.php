@@ -92,6 +92,10 @@ $routes = [
     
     // Rota pública de PDF
     'pdfs/view' => 'endpoints/pdfs-view.php',
+    
+    // Documentos de Colaboradores
+    'colaborador-docs' => 'endpoints/colaborador-docs.php',
+    'colaborador-docs-view' => 'endpoints/colaborador-docs-view.php',
 ];
 
 // Debug: log do path processado (remover em produção)
@@ -143,6 +147,10 @@ if (!isset($routes[$path])) {
         $financeiro_id = $matches[1];
         $endpoint_file = 'endpoints/financeiros-observacoes.php';
         $_GET['financeiro_id'] = $financeiro_id;
+    } elseif (preg_match('/^colaboradores\/(\d+)$/', $path, $matches)) {
+        $colaborador_id = $matches[1];
+        $endpoint_file = 'endpoints/colaboradores.php';
+        $_GET['id'] = $colaborador_id;
     } elseif (preg_match('/^observacoes-financeiro\/(\d+)$/', $path, $matches)) {
         $observacao_id = $matches[1];
         $endpoint_file = 'endpoints/observacoes-financeiro.php';

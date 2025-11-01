@@ -13,6 +13,7 @@ $TABLE_MAPPING = [
     'observacoes_financeiro' => 'tab_observacoes_financeiro',
     'usuarios' => 'usuarios',
     'colaboradores' => 'colaboradores',
+    'colaborador_docs' => 'tab_colaborador_docs',
     'marcas' => 'marcas',
     'posicoes' => 'posicoes',
     'seguradoras' => 'seguradoras'

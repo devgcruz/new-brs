@@ -86,16 +86,28 @@ const makeRequest = async (url, options = {}) => {
           throw new Error('Sessão expirada');
         }
         
-        // Tratar erros de validação (422) de forma especial
-        if (response.status === 422) {
-          const errorData = await response.json();
-          const validationError = new Error('Validation Error');
-          validationError.status = 422;
-          validationError.errors = errorData.errors || errorData.message;
-          throw validationError;
+        // Tentar ler mensagem de erro da resposta JSON
+        let errorMessage = `Erro ${response.status}: ${response.statusText}`;
+        let errorData = {};
+        
+        try {
+          errorData = await response.json();
+          if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch (e) {
+          // Se não conseguir ler JSON, usar mensagem padrão
         }
         
-        throw new Error(`Erro ${response.status}: ${response.statusText}`);
+        const error = new Error(errorMessage);
+        error.status = response.status;
+        
+        // Tratar erros de validação (422) e outros erros com mensagem
+        if (response.status === 422 || response.status === 400) {
+          error.errors = errorData.errors || errorData.message || errorMessage;
+        }
+        
+        throw error;
       }
 
       return response.json();
