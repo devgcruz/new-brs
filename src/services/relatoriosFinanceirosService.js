@@ -351,6 +351,31 @@ const relatoriosFinanceirosService = {
     } catch (error) {
       return '-';
     }
+  },
+
+  /**
+   * Busca o relatório financeiro AGRUPADO POR ENTRADA.
+   * @param {Object} filters - Filtros, ex: { data_inicio, data_fim }
+   * @returns {Promise<Object>} Resposta da API
+   */
+  async getRelatorioAgrupado(filters = {}) {
+    try {
+      const params = new URLSearchParams();
+      if (filters.data_inicio) params.append('data_inicio', filters.data_inicio);
+      if (filters.data_fim) params.append('data_fim', filters.data_fim);
+      
+      const queryString = params.toString();
+      const response = await makeAuthenticatedRequest(`/relatorio-financeiro-agrupado${queryString ? `?${queryString}` : ''}`);
+      
+      return {
+        success: true,
+        data: response.data || [],
+        meta: response.meta || { total: response.data?.length || 0 }
+      };
+    } catch (error) {
+      console.error('Erro ao buscar relatório financeiro agrupado:', error);
+      return { success: false, data: [], message: error.message };
+    }
   }
 };
 
