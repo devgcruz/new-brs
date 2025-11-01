@@ -406,16 +406,8 @@ const RegistrosPage = () => {
     );
   };
 
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
   return (
-    <Box>
+    <Box sx={{ position: 'relative' }}>
       <Typography variant="h4" gutterBottom>
         Registros de Entrada
       </Typography>
@@ -441,6 +433,28 @@ const RegistrosPage = () => {
           {error}
         </Alert>
       )}
+
+      <Box sx={{ position: 'relative' }}>
+        {/* Overlay de loading */}
+        {loading && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              backgroundColor: 'rgba(255, 255, 255, 0.7)',
+              zIndex: 1000,
+              backdropFilter: 'blur(2px)',
+            }}
+          >
+            <CircularProgress />
+          </Box>
+        )}
 
       <Grid container spacing={2}>
         {(Array.isArray(filteredEntradas) ? filteredEntradas : []).map((entrada, index) => (
@@ -611,6 +625,7 @@ const RegistrosPage = () => {
           </Grid>
         ))}
       </Grid>
+      </Box>
 
       {/* Controles de paginação */}
       <PaginationControls
