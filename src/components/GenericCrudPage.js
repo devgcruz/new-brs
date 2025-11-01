@@ -76,11 +76,41 @@ const GenericCrudPage = ({
       const response = await apiService.getAll(currentPage, perPage, searchTerm);
       
       if (response.success) {
-        setItems(response.data);
-        setTotalPages(response.meta.last_page);
-        setTotalItems(response.meta.total);
-        setPaginationInfo(response.meta);
+        // Lidar com ambos os formatos: dados diretos ou aninhados
+        let itemsData = [];
+        let metaData = {};
+        
+        // Verificar se response.data é um array diretamente
+        if (Array.isArray(response.data)) {
+          itemsData = response.data;
+          metaData = response.meta || {};
+        } 
+        // Verificar se response.data é um objeto com 'data' e 'meta' aninhados
+        else if (response.data && typeof response.data === 'object') {
+          // Formato aninhado: { data: [...], meta: {...} }
+          if (Array.isArray(response.data.data)) {
+            itemsData = response.data.data;
+            metaData = response.data.meta || response.meta || {};
+          }
+          // Formato direto mas não array (caso raro)
+          else {
+            itemsData = [];
+            metaData = response.data.meta || response.meta || {};
+          }
+        }
+        
+        // Garantir que itemsData seja sempre um array
+        if (!Array.isArray(itemsData)) {
+          console.warn('GenericCrudPage: response.data não é um array válido, usando array vazio');
+          itemsData = [];
+        }
+        
+        setItems(itemsData);
+        setTotalPages(metaData.last_page || metaData.totalPages || 1);
+        setTotalItems(metaData.total || metaData.totalItems || 0);
+        setPaginationInfo(metaData);
       } else {
+        setItems([]); // Garantir array vazio em caso de erro
         setAlert({
           show: true,
           message: 'Erro ao carregar dados',
@@ -89,6 +119,7 @@ const GenericCrudPage = ({
       }
     } catch (error) {
       console.error('Erro ao carregar itens:', error);
+      setItems([]); // Garantir array vazio em caso de exceção
       setAlert({
         show: true,
         message: 'Erro ao carregar dados',

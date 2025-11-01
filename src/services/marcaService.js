@@ -56,12 +56,9 @@ const marcaService = {
   // Atualizar marca
   async update(id, marcaData) {
     try {
-      const response = await makeRequest(`/marcas/${id}`, {
+      const response = await makeRequest(`/marcas?id=${id}`, {
         method: 'PUT',
-        body: JSON.stringify(marcaData),
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        body: marcaData
       });
       return response;
     } catch (error) {
@@ -73,7 +70,7 @@ const marcaService = {
   // Excluir marca
   async delete(id) {
     try {
-      const response = await makeRequest(`/marcas/${id}`, {
+      const response = await makeRequest(`/marcas?id=${id}`, {
         method: 'DELETE'
       });
       return response;

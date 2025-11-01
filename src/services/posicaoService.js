@@ -56,12 +56,9 @@ const posicaoService = {
   // Atualizar posição
   async update(id, posicaoData) {
     try {
-      const response = await makeRequest(`/posicoes/${id}`, {
+      const response = await makeRequest(`/posicoes?id=${id}`, {
         method: 'PUT',
-        body: JSON.stringify(posicaoData),
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        body: posicaoData
       });
       return response;
     } catch (error) {
@@ -73,7 +70,7 @@ const posicaoService = {
   // Excluir posição
   async delete(id) {
     try {
-      const response = await makeRequest(`/posicoes/${id}`, {
+      const response = await makeRequest(`/posicoes?id=${id}`, {
         method: 'DELETE'
       });
       return response;

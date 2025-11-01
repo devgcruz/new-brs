@@ -19,11 +19,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once API_BASE_DIR . "/config/db.php";
+require_once API_BASE_DIR . "/config/table-mapping.php";
 require_once API_BASE_DIR . "/middleware/auth.php";
 require_once API_BASE_DIR . "/helpers/auth.php";
 
 $method = $_SERVER['REQUEST_METHOD'];
 $usuario = middlewareAutenticacao();
+
+// Obter nome da tabela usando mapeamento
+$tableName = getTableName('seguradoras');
 
 switch ($method) {
     case 'GET':
@@ -34,7 +38,7 @@ switch ($method) {
         
         try {
             if ($all) {
-                $sql = "SELECT id, nome FROM seguradoras ORDER BY nome ASC";
+                $sql = "SELECT id, nome FROM $tableName ORDER BY nome ASC";
                 $stmt = $pdo->query($sql);
                 respostaJson(true, $stmt->fetchAll());
             } else {
@@ -49,12 +53,12 @@ switch ($method) {
                 
                 $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
                 
-                $count_sql = "SELECT COUNT(*) as total FROM seguradoras $where_clause";
+                $count_sql = "SELECT COUNT(*) as total FROM $tableName $where_clause";
                 $count_stmt = $pdo->prepare($count_sql);
                 $count_stmt->execute($params);
                 $total = $count_stmt->fetch()['total'];
                 
-                $sql = "SELECT * FROM seguradoras $where_clause ORDER BY nome ASC LIMIT :offset, :per_page";
+                $sql = "SELECT * FROM $tableName $where_clause ORDER BY nome ASC LIMIT :offset, :per_page";
                 $stmt = $pdo->prepare($sql);
                 $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
                 $stmt->bindValue(':per_page', $per_page, PDO::PARAM_INT);
@@ -94,7 +98,7 @@ switch ($method) {
         validarDadosObrigatorios($data, ['nome']);
         
         try {
-            $sql = "INSERT INTO seguradoras (nome, created_at, updated_at) VALUES (:nome, NOW(), NOW())";
+            $sql = "INSERT INTO $tableName (nome, created_at, updated_at) VALUES (:nome, NOW(), NOW())";
             $stmt = $pdo->prepare($sql);
             $stmt->execute(['nome' => sanitizar($data['nome'])]);
             
@@ -105,49 +109,50 @@ switch ($method) {
         break;
         
     case 'PUT':
-        $seguradora_id = $_GET['id'] ?? '';
-        if (empty($seguradora_id)) {
-            respostaJson(false, null, 'ID da seguradora não especificado', 400);
+        if (!isset($_GET['id'])) {
+            respostaJson(false, null, 'ID é obrigatório', 400);
         }
-        
-        $input = file_get_contents('php://input');
-        $data = json_decode($input, true);
-        
-        if (!$data) {
-            respostaJson(false, null, 'Dados JSON inválidos', 400);
+        $id = (int)$_GET['id'];
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        if (empty($data['nome'])) {
+            respostaJson(false, null, 'O campo Nome é obrigatório', 422);
         }
-        
+
         try {
-            $sql = "UPDATE seguradoras SET nome = :nome, updated_at = NOW() WHERE id = :id";
+            $sql = "UPDATE $tableName SET nome = ?, updated_at = NOW() WHERE id = ?";
             $stmt = $pdo->prepare($sql);
-            $stmt->execute(['nome' => sanitizar($data['nome']), 'id' => $seguradora_id]);
-            
-            respostaJson(true, null, 'Seguradora atualizada com sucesso');
+            $stmt->execute([$data['nome'], $id]);
+
+            $stmtGet = $pdo->prepare("SELECT * FROM $tableName WHERE id = ?");
+            $stmtGet->execute([$id]);
+            $updatedData = $stmtGet->fetch();
+
+            respostaJson(true, $updatedData, 'Seguradora atualizada com sucesso');
+        } catch (PDOException $e) {
+            respostaJson(false, null, 'Erro de banco de dados: ' . $e->getMessage(), 500);
         } catch (Exception $e) {
             respostaJson(false, null, 'Erro ao atualizar seguradora', 500);
         }
         break;
         
     case 'DELETE':
-        $seguradora_id = $_GET['id'] ?? '';
-        if (empty($seguradora_id)) {
-            respostaJson(false, null, 'ID da seguradora não especificado', 400);
+        if (!isset($_GET['id'])) {
+            respostaJson(false, null, 'ID é obrigatório', 400);
         }
-        
+        $id = (int)$_GET['id'];
+
         try {
-            // Verificar se está sendo usado
-            $check_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM entradas WHERE SEGURADORA = (SELECT nome FROM seguradoras WHERE id = :id)");
-            $check_stmt->execute(['id' => $seguradora_id]);
-            $usage = $check_stmt->fetch()['count'];
-            
-            if ($usage > 0) {
-                respostaJson(false, null, 'Não é possível deletar seguradora que está sendo usada', 400);
+            $sql = "DELETE FROM $tableName WHERE id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$id]);
+
+            respostaJson(true, null, 'Seguradora excluída com sucesso');
+        } catch (PDOException $e) {
+            if ($e->getCode() == 23000) {
+                 respostaJson(false, null, 'Erro: Esta seguradora está em uso e não pode ser excluída.', 409);
             }
-            
-            $stmt = $pdo->prepare("DELETE FROM seguradoras WHERE id = :id");
-            $stmt->execute(['id' => $seguradora_id]);
-            
-            respostaJson(true, null, 'Seguradora deletada com sucesso');
+            respostaJson(false, null, 'Erro de banco de dados: ' . $e->getMessage(), 500);
         } catch (Exception $e) {
             respostaJson(false, null, 'Erro ao deletar seguradora', 500);
         }

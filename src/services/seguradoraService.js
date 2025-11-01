@@ -56,12 +56,9 @@ const seguradoraService = {
   // Atualizar seguradora
   async update(id, seguradoraData) {
     try {
-      const response = await makeRequest(`/seguradoras/${id}`, {
+      const response = await makeRequest(`/seguradoras?id=${id}`, {
         method: 'PUT',
-        body: JSON.stringify(seguradoraData),
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        body: seguradoraData
       });
       return response;
     } catch (error) {
@@ -73,7 +70,7 @@ const seguradoraService = {
   // Excluir seguradora
   async delete(id) {
     try {
-      const response = await makeRequest(`/seguradoras/${id}`, {
+      const response = await makeRequest(`/seguradoras?id=${id}`, {
         method: 'DELETE'
       });
       return response;

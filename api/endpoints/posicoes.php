@@ -19,11 +19,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once API_BASE_DIR . "/config/db.php";
+require_once API_BASE_DIR . "/config/table-mapping.php";
 require_once API_BASE_DIR . "/middleware/auth.php";
 require_once API_BASE_DIR . "/helpers/auth.php";
 
 $method = $_SERVER['REQUEST_METHOD'];
 $usuario = middlewareAutenticacao();
+
+// Obter nome da tabela usando mapeamento
+$tableName = getTableName('posicoes');
 
 switch ($method) {
     case 'GET':
@@ -34,7 +38,7 @@ switch ($method) {
         
         try {
             if ($all) {
-                $sql = "SELECT id, nome FROM posicoes ORDER BY nome ASC";
+                $sql = "SELECT id, nome FROM $tableName ORDER BY nome ASC";
                 $stmt = $pdo->query($sql);
                 respostaJson(true, $stmt->fetchAll());
             } else {
@@ -49,12 +53,12 @@ switch ($method) {
                 
                 $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
                 
-                $count_sql = "SELECT COUNT(*) as total FROM posicoes $where_clause";
+                $count_sql = "SELECT COUNT(*) as total FROM $tableName $where_clause";
                 $count_stmt = $pdo->prepare($count_sql);
                 $count_stmt->execute($params);
                 $total = $count_stmt->fetch()['total'];
                 
-                $sql = "SELECT * FROM posicoes $where_clause ORDER BY nome ASC LIMIT :offset, :per_page";
+                $sql = "SELECT * FROM $tableName $where_clause ORDER BY nome ASC LIMIT :offset, :per_page";
                 $stmt = $pdo->prepare($sql);
                 $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
                 $stmt->bindValue(':per_page', $per_page, PDO::PARAM_INT);
@@ -94,7 +98,7 @@ switch ($method) {
         validarDadosObrigatorios($data, ['nome']);
         
         try {
-            $sql = "INSERT INTO posicoes (nome, created_at, updated_at) VALUES (:nome, NOW(), NOW())";
+            $sql = "INSERT INTO $tableName (nome, created_at, updated_at) VALUES (:nome, NOW(), NOW())";
             $stmt = $pdo->prepare($sql);
             $stmt->execute(['nome' => sanitizar($data['nome'])]);
             
@@ -105,49 +109,60 @@ switch ($method) {
         break;
         
     case 'PUT':
-        $posicao_id = $_GET['id'] ?? '';
-        if (empty($posicao_id)) {
-            respostaJson(false, null, 'ID da posição não especificado', 400);
+        // 1. Obter ID da URL e dados do body
+        if (!isset($_GET['id'])) {
+            respostaJson(false, null, 'ID é obrigatório', 400);
         }
-        
-        $input = file_get_contents('php://input');
-        $data = json_decode($input, true);
-        
-        if (!$data) {
-            respostaJson(false, null, 'Dados JSON inválidos', 400);
+        $id = (int)$_GET['id'];
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        // 2. Validar dados
+        if (empty($data['nome'])) {
+            respostaJson(false, null, 'O campo Nome é obrigatório', 422);
         }
-        
+
         try {
-            $sql = "UPDATE posicoes SET nome = :nome, updated_at = NOW() WHERE id = :id";
+            // 3. Executar o UPDATE
+            $sql = "UPDATE $tableName SET nome = ?, updated_at = NOW() WHERE id = ?";
             $stmt = $pdo->prepare($sql);
-            $stmt->execute(['nome' => sanitizar($data['nome']), 'id' => $posicao_id]);
-            
-            respostaJson(true, null, 'Posição atualizada com sucesso');
+            $stmt->execute([$data['nome'], $id]);
+
+            // 4. Buscar os dados atualizados para retornar ao frontend
+            // (O GenericCrudPage espera os dados atualizados)
+            $stmtGet = $pdo->prepare("SELECT * FROM $tableName WHERE id = ?");
+            $stmtGet->execute([$id]);
+            $updatedData = $stmtGet->fetch();
+
+            respostaJson(true, $updatedData, 'Posição atualizada com sucesso');
+
+        } catch (PDOException $e) {
+            respostaJson(false, null, 'Erro de banco de dados: ' . $e->getMessage(), 500);
         } catch (Exception $e) {
             respostaJson(false, null, 'Erro ao atualizar posição', 500);
         }
         break;
         
     case 'DELETE':
-        $posicao_id = $_GET['id'] ?? '';
-        if (empty($posicao_id)) {
-            respostaJson(false, null, 'ID da posição não especificado', 400);
+        // 1. Obter ID da URL
+        if (!isset($_GET['id'])) {
+            respostaJson(false, null, 'ID é obrigatório', 400);
         }
-        
+        $id = (int)$_GET['id'];
+
         try {
-            // Verificar se está sendo usado
-            $check_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM entradas WHERE POSICAO = (SELECT nome FROM posicoes WHERE id = :id)");
-            $check_stmt->execute(['id' => $posicao_id]);
-            $usage = $check_stmt->fetch()['count'];
-            
-            if ($usage > 0) {
-                respostaJson(false, null, 'Não é possível deletar posição que está sendo usada', 400);
+            // 2. Executar o DELETE
+            $sql = "DELETE FROM $tableName WHERE id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$id]);
+
+            respostaJson(true, null, 'Posição excluída com sucesso');
+
+        } catch (PDOException $e) {
+            // Tratar erros (ex: chave estrangeira)
+            if ($e->getCode() == 23000) {
+                 respostaJson(false, null, 'Erro: Esta posição está em uso e não pode ser excluída.', 409);
             }
-            
-            $stmt = $pdo->prepare("DELETE FROM posicoes WHERE id = :id");
-            $stmt->execute(['id' => $posicao_id]);
-            
-            respostaJson(true, null, 'Posição deletada com sucesso');
+            respostaJson(false, null, 'Erro de banco de dados: ' . $e->getMessage(), 500);
         } catch (Exception $e) {
             respostaJson(false, null, 'Erro ao deletar posição', 500);
         }
