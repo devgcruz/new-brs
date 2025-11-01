@@ -371,7 +371,11 @@ const EditarRegistroModal = ({ open, onClose, onSave, onDelete, registroData }) 
     }
   }, [textFieldsData, dropdownValues, onSave, colaboradores, registroData]);
 
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback((event, reason) => {
+    // Prevenir fechamento ao clicar fora (backdrop)
+    if (reason === 'backdropClick') {
+      return;
+    }
     // Resetar todos os campos para strings vazias para evitar mudança de controlado para não controlado
     setTextFieldsData(initialState);
     setPdfModalOpen(false);

@@ -114,7 +114,7 @@ const ProfilePage = () => {
       // Se senha foi fornecida, alterar senha separadamente
       if (formData.password.trim()) {
         try {
-          await userService.changePassword({
+          await userService.changeMyPassword({
             current_password: formData.currentPassword || '',
             new_password: formData.password.trim(),
             new_password_confirmation: formData.confirmPassword.trim()

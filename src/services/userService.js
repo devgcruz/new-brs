@@ -203,6 +203,52 @@ const userService = {
         message: error.message || 'Erro ao alterar senha'
       };
     }
+  },
+
+  /**
+   * Atualizar o perfil do próprio utilizador logado
+   * @param {Object} data - Dados do perfil {nome, email}
+   * @returns {Promise<Object>} Resposta da API com o utilizador atualizado
+   */
+  async updateProfile(data) {
+    try {
+      const response = await makeRequest('/profile', {
+        method: 'POST', // O endpoint profile.php usa POST para updates
+        body: data
+      });
+
+      if (!response.success) {
+        throw new Error(response.message || 'Erro ao atualizar perfil');
+      }
+      return response.data; // Retorna o utilizador atualizado
+
+    } catch (error) {
+      console.error('Erro ao atualizar perfil:', error);
+      throw error; // Propaga o erro para o ProfilePage tratar
+    }
+  },
+
+  /**
+   * Alterar a própria senha do utilizador logado
+   * @param {Object} data - {current_password, new_password, new_password_confirmation}
+   * @returns {Promise<Object>} Resposta da API
+   */
+  async changeMyPassword(data) {
+    try {
+      const response = await makeRequest('/profile-change-password', {
+        method: 'POST',
+        body: data
+      });
+
+      if (!response.success) {
+        throw new Error(response.message || 'Erro ao alterar senha');
+      }
+      return response;
+
+    } catch (error) {
+      console.error('Erro ao alterar senha:', error);
+      throw error; // Propaga o erro
+    }
   }
 };
 

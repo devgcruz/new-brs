@@ -363,7 +363,12 @@ const NovoRegistroModal = ({ open, isOpen, onClose, onSave, onSaveSuccess }) => 
     }
   }, [formData, onSave, onSaveSuccess, colaboradores]);
 
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback((event, reason) => {
+    if (loading) return; // Impede fechar durante salvamento
+    // Prevenir fechamento ao clicar fora (backdrop)
+    if (reason === 'backdropClick') {
+      return;
+    }
     // Resetar todos os campos para strings vazias para evitar mudança de controlado para não controlado
     setFormData({
       protocolo: '',
@@ -415,7 +420,7 @@ const NovoRegistroModal = ({ open, isOpen, onClose, onSave, onSaveSuccess }) => 
       severity: 'error'
     });
     onClose();
-  }, [onClose]);
+  }, [onClose, loading]);
 
   // Estilo comum para campos de formulário
   const fieldSx = {

@@ -16,7 +16,9 @@ import {
   ListItem,
   ListItemText,
   Divider,
-  Snackbar
+  Snackbar,
+  Fade,
+  Grow
 } from '@mui/material';
 import { Add as AddIcon, Search as SearchIcon, Comment as CommentIcon } from '@mui/icons-material';
 import entradaService from '../services/entradaService';
@@ -407,7 +409,7 @@ const RegistrosPage = () => {
   };
 
   return (
-    <Box sx={{ position: 'relative' }}>
+    <Box>
       <Typography variant="h4" gutterBottom>
         Registros de Entrada
       </Typography>
@@ -428,52 +430,61 @@ const RegistrosPage = () => {
         />
       </Box>
 
+      {/* --- INÍCIO DA SOLUÇÃO DE ANIMAÇÃO --- */}
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
 
-      <Box sx={{ position: 'relative' }}>
-        {/* Overlay de loading */}
-        {loading && (
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              backgroundColor: 'rgba(255, 255, 255, 0.7)',
-              zIndex: 1000,
-              backdropFilter: 'blur(2px)',
-            }}
-          >
-            <CircularProgress />
-          </Box>
-        )}
+      {/* 2. Spinner central APENAS para o primeiro carregamento */}
+      {loading && entradas.length === 0 && (
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
+        </Box>
+      )}
 
-      <Grid container spacing={2}>
-        {(Array.isArray(filteredEntradas) ? filteredEntradas : []).map((entrada, index) => (
-          <Grid item xs={12} sm={6} md={4} lg={3} key={entrada.id || `entrada-${index}`}>
-            <Card
-              sx={{
-                cursor: 'pointer',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                backgroundColor: entrada.SITUACAO === 'Finalizado' ? '#e8f5e9' : 'inherit',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4,
-                },
-              }}
-              onClick={() => handleEditClick(entrada)}
-            >
+      {/* 3. Lógica "Nenhum resultado" */}
+      {!loading && filteredEntradas.length === 0 && (
+        <Box textAlign="center" py={4}>
+          <Typography variant="h6" color="text.secondary">
+            {searchTerm ? 'Nenhum registro encontrado para a busca' : 'Nenhum registro encontrado'}
+          </Typography>
+        </Box>
+      )}
+
+      {/* 4. Wrapper de conteúdo com animação de "fade" (opacidade) */}
+      {/* Mantém os cards antigos visíveis enquanto carrega novos */}
+      <Fade in={!loading || entradas.length > 0} timeout={300}>
+        <Box sx={{
+          transition: 'opacity 0.3s ease-in-out',
+          opacity: loading && entradas.length > 0 ? 0.6 : 1, // Fica semi-transparente ao recarregar
+          pointerEvents: loading ? 'none' : 'auto', // Desativa cliques durante a recarga
+        }}>
+          <Grid container spacing={2}>
+          {(Array.isArray(filteredEntradas) ? filteredEntradas : []).map((entrada, index) => (
+            <Grid item xs={12} sm={6} md={4} lg={3} key={entrada.id || `entrada-${index}`}>
+              <Grow 
+                in={!loading || entradas.length > 0} 
+                timeout={400}
+                style={{ transitionDelay: `${index * 50}ms` }}
+              >
+                <Card
+                  sx={{
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s, box-shadow 0.2s',
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: entrada.SITUACAO === 'Finalizado' ? '#e8f5e9' : 'inherit',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: 4,
+                    },
+                  }}
+                  onClick={() => handleEditClick(entrada)}
+                >
               <CardContent
                 sx={{
                   display: 'flex',
@@ -622,10 +633,13 @@ const RegistrosPage = () => {
                 </Typography>
               </CardContent>
             </Card>
+              </Grow>
           </Grid>
         ))}
-      </Grid>
+        </Grid>
       </Box>
+      </Fade>
+      {/* --- FIM DA SOLUÇÃO DE ANIMAÇÃO --- */}
 
       {/* Controles de paginação */}
       <PaginationControls
@@ -637,14 +651,6 @@ const RegistrosPage = () => {
         onPerPageChange={handlePerPageChange}
         loading={loading}
       />
-
-      {filteredEntradas.length === 0 && !loading && (
-        <Box textAlign="center" py={4}>
-          <Typography variant="h6" color="text.secondary">
-            {searchTerm ? 'Nenhum registro encontrado para a busca' : 'Nenhum registro encontrado'}
-          </Typography>
-        </Box>
-      )}
 
       <AccessibleFab
         color="primary"
