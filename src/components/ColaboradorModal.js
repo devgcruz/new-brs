@@ -62,7 +62,6 @@ const colaboradorSchema = z.object({
 
 const ColaboradorModal = ({ open, onClose, colaborador, onSaved }) => {
   const [loading, setLoading] = useState(false);
-  const [alert, setAlert] = useState({ show: false, message: '', type: 'success' });
   const [validationErrors, setValidationErrors] = useState({});
 
   // Hook para acessar o store de dados
@@ -103,7 +102,6 @@ const ColaboradorModal = ({ open, onClose, colaborador, onSaved }) => {
         reset();
       }
       setValidationErrors({});
-      setAlert({ show: false, message: '', type: 'success' });
     }
   }, [open, colaborador, setValue, reset]);
 
@@ -148,7 +146,6 @@ const ColaboradorModal = ({ open, onClose, colaborador, onSaved }) => {
   // Função de submit do formulário
   const onSubmit = async (data) => {
     setLoading(true);
-    setAlert({ show: false, message: '', type: 'success' });
     setValidationErrors({});
 
     try {
@@ -158,33 +155,20 @@ const ColaboradorModal = ({ open, onClose, colaborador, onSaved }) => {
       } else {
         response = await colaboradorService.create(data);
       }
-      
-      setAlert({
-        show: true,
-        message: response.message || `Colaborador ${isEditing ? 'atualizado' : 'cadastrado'} com sucesso!`,
-        type: 'success'
-      });
 
       // Invalidar cache de colaboradores para atualizar os dropdowns
       console.log('🔄 ColaboradorModal: Invalidando cache de colaboradores...');
       invalidateColaboradoresCache();
 
-      // Fechar modal após 1 segundo
-      setTimeout(() => {
-        onSaved();
-      }, 1000);
+      // Fechar modal imediatamente após sucesso
+      onSaved();
 
     } catch (error) {
       // Verificar se é erro de validação (422)
       if (error.status === 422 && error.errors) {
         setValidationErrors(error.errors);
-        setAlert({
-          show: true,
-          message: 'Por favor, corrija os erros abaixo e tente novamente.',
-          type: 'error'
-        });
       } else {
-        // Tratar outros tipos de erro
+        // Tratar outros tipos de erro - adicionar erro genérico
         let errorMessage = `Erro ao ${isEditing ? 'atualizar' : 'cadastrar'} colaborador. Tente novamente.`;
         
         if (error.message) {
@@ -196,10 +180,10 @@ const ColaboradorModal = ({ open, onClose, colaborador, onSaved }) => {
           errorMessage = Object.values(errors).flat().join(', ');
         }
 
-        setAlert({
-          show: true,
-          message: errorMessage,
-          type: 'error'
+        // Adicionar erro genérico aos validationErrors para exibir no formulário
+        setValidationErrors({
+          ...validationErrors,
+          _general: [errorMessage]
         });
       }
     } finally {
@@ -230,13 +214,19 @@ const ColaboradorModal = ({ open, onClose, colaborador, onSaved }) => {
       </DialogTitle>
       
       <DialogContent>
-        {alert.show && (
+        {validationErrors._general && (
           <Alert 
-            severity={alert.type} 
+            severity="error" 
             sx={{ mb: 3 }}
-            onClose={() => setAlert({ show: false, message: '', type: 'success' })}
+            onClose={() => {
+              setValidationErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors._general;
+                return newErrors;
+              });
+            }}
           >
-            {alert.message}
+            {validationErrors._general[0]}
           </Alert>
         )}
 

@@ -40,6 +40,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import GenericCrudModal from './GenericCrudModal';
 import useAppDataStore from '../store/appDataStore';
+import useNotification from '../hooks/useNotification';
+import EnhancedNotification from './EnhancedNotification';
 
 const GenericCrudPage = ({ 
   title, 
@@ -52,7 +54,9 @@ const GenericCrudPage = ({
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [alert, setAlert] = useState({ show: false, message: '', type: 'success' });
+  
+  // Hook para notificações melhoradas
+  const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
 
   // Hook para acessar o store de dados
   const { invalidateCache } = useAppDataStore();
@@ -111,20 +115,12 @@ const GenericCrudPage = ({
         setPaginationInfo(metaData);
       } else {
         setItems([]); // Garantir array vazio em caso de erro
-        setAlert({
-          show: true,
-          message: 'Erro ao carregar dados',
-          type: 'error'
-        });
+        showError('Erro ao carregar dados');
       }
     } catch (error) {
       console.error('Erro ao carregar itens:', error);
       setItems([]); // Garantir array vazio em caso de exceção
-      setAlert({
-        show: true,
-        message: 'Erro ao carregar dados',
-        type: 'error'
-      });
+      showError('Erro ao carregar dados');
     } finally {
       setLoading(false);
     }
@@ -174,11 +170,7 @@ const GenericCrudPage = ({
       const response = await apiService.delete(deleteDialog.item.id);
       
       if (response.success) {
-        setAlert({
-          show: true,
-          message: `${itemName} excluído com sucesso!`,
-          type: 'success'
-        });
+        showSuccess(`${itemName} excluído com sucesso!`);
         
         // Invalidar cache para atualizar os dropdowns em outros modais
         console.log(`🔄 GenericCrudPage: Invalidando cache após exclusão de ${itemName}...`);
@@ -186,19 +178,11 @@ const GenericCrudPage = ({
         
         loadItems();
       } else {
-        setAlert({
-          show: true,
-          message: response.message || 'Erro ao excluir',
-          type: 'error'
-        });
+        showError(response.message || 'Erro ao excluir');
       }
     } catch (error) {
       console.error('Erro ao excluir:', error);
-      setAlert({
-        show: true,
-        message: 'Erro ao excluir',
-        type: 'error'
-      });
+      showError('Erro ao excluir');
     } finally {
       setLoading(false);
       setDeleteDialog({ open: false, item: null });
@@ -217,13 +201,9 @@ const GenericCrudPage = ({
       }
       
       if (response.success) {
-        setAlert({
-          show: true,
-          message: editingItem ? 
-            `${itemName} atualizado com sucesso!` : 
-            `${itemName} criado com sucesso!`,
-          type: 'success'
-        });
+        showSuccess(editingItem ? 
+          `${itemName} atualizado com sucesso!` : 
+          `${itemName} criado com sucesso!`);
         
         // Invalidar cache para atualizar os dropdowns em outros modais
         console.log(`🔄 GenericCrudPage: Invalidando cache após ${editingItem ? 'atualização' : 'criação'} de ${itemName}...`);
@@ -232,19 +212,11 @@ const GenericCrudPage = ({
         handleCloseModal();
         loadItems();
       } else {
-        setAlert({
-          show: true,
-          message: response.message || 'Erro ao salvar',
-          type: 'error'
-        });
+        showError(response.message || 'Erro ao salvar');
       }
     } catch (error) {
       console.error('Erro ao salvar:', error);
-      setAlert({
-        show: true,
-        message: 'Erro ao salvar',
-        type: 'error'
-      });
+      showError('Erro ao salvar');
     } finally {
       setLoading(false);
     }
@@ -295,16 +267,6 @@ const GenericCrudPage = ({
         />
       </Paper>
 
-      {/* Alert */}
-      {alert.show && (
-        <Alert 
-          severity={alert.type} 
-          onClose={() => setAlert({ show: false, message: '', type: 'success' })}
-          sx={{ mb: 2 }}
-        >
-          {alert.message}
-        </Alert>
-      )}
 
       {/* Conteúdo */}
       <Paper sx={{ p: 2 }}>
@@ -538,6 +500,16 @@ const GenericCrudPage = ({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Notificação */}
+      <EnhancedNotification
+        open={notification.open}
+        onClose={hideNotification}
+        message={notification.message}
+        severity={notification.severity}
+        duration={notification.duration}
+        position={{ vertical: 'top', horizontal: 'center' }}
+      />
     </Container>
   );
 };

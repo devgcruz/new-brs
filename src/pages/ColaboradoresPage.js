@@ -46,13 +46,17 @@ import colaboradorService from '../services/colaboradorService';
 import ColaboradorModal from '../components/ColaboradorModal';
 import ColaboradorDocModal from '../components/ColaboradorDocModal';
 import useAppDataStore from '../store/appDataStore';
+import useNotification from '../hooks/useNotification';
+import EnhancedNotification from '../components/EnhancedNotification';
 
 const ColaboradoresPage = () => {
   const navigate = useNavigate();
   const [colaboradores, setColaboradores] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [alert, setAlert] = useState({ show: false, message: '', type: 'success' });
+  
+  // Hook para notificações melhoradas
+  const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
   const [deleteDialog, setDeleteDialog] = useState({ open: false, colaborador: null });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingColaborador, setEditingColaborador] = useState(null);
@@ -120,12 +124,8 @@ const ColaboradoresPage = () => {
       setPaginationInfo(meta);
     } catch (error) {
       console.error('Erro ao carregar colaboradores:', error);
-      setColaboradores([]); // Garantir array vazio em caso de erro
-      setAlert({
-        show: true,
-        message: 'Erro ao carregar colaboradores',
-        type: 'error'
-      });
+        setColaboradores([]); // Garantir array vazio em caso de erro
+        showError('Erro ao carregar colaboradores');
     } finally {
       setLoading(false);
     }
@@ -180,11 +180,7 @@ const ColaboradoresPage = () => {
     console.log('🔄 ColaboradoresPage: Invalidando cache de colaboradores...');
     invalidateColaboradoresCache();
     
-    setAlert({
-      show: true,
-      message: 'Colaborador salvo com sucesso!',
-      type: 'success'
-    });
+    showSuccess('Colaborador salvo com sucesso!');
   };
 
   // Fechar modal
@@ -202,32 +198,20 @@ const ColaboradoresPage = () => {
       const response = await colaboradorService.delete(deleteDialog.colaborador.id);
       
       if (response.success) {
-        setAlert({
-          show: true,
-          message: 'Colaborador excluído com sucesso!',
-          type: 'success'
-        });
+        showSuccess('Colaborador excluído com sucesso!');
         loadColaboradores(); // Recarregar lista
         
         // Invalidar cache de colaboradores para atualizar os dropdowns em outros modais
         console.log('🔄 ColaboradoresPage: Invalidando cache após exclusão...');
         invalidateColaboradoresCache();
       } else {
-        setAlert({
-          show: true,
-          message: response.message || 'Erro ao excluir colaborador',
-          type: 'error'
-        });
+        showError(response.message || 'Erro ao excluir colaborador');
       }
     } catch (error) {
       console.error('Erro ao excluir colaborador:', error);
-      // Extrair mensagem de erro (pode vir do erro ou do response)
-      const errorMessage = error.message || (error.response?.message) || 'Erro ao excluir colaborador';
-      setAlert({
-        show: true,
-        message: errorMessage,
-        type: 'error'
-      });
+        // Extrair mensagem de erro (pode vir do erro ou do response)
+        const errorMessage = error.message || (error.response?.message) || 'Erro ao excluir colaborador';
+        showError(errorMessage);
     } finally {
       setLoading(false);
       setDeleteDialog({ open: false, colaborador: null });
@@ -276,15 +260,6 @@ const ColaboradoresPage = () => {
       </Paper>
 
       {/* Alert */}
-      {alert.show && (
-        <Alert 
-          severity={alert.type} 
-          onClose={() => setAlert({ show: false, message: '', type: 'success' })}
-          sx={{ mb: 2 }}
-        >
-          {alert.message}
-        </Alert>
-      )}
 
       {/* Conteúdo */}
       <Paper sx={{ p: 2 }}>
@@ -580,6 +555,15 @@ const ColaboradoresPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      {/* Notificação */}
+      <EnhancedNotification
+        open={notification.open}
+        onClose={hideNotification}
+        message={notification.message}
+        severity={notification.severity}
+        duration={notification.duration}
+        position={{ vertical: 'top', horizontal: 'center' }}
+      />
     </Container>
   );
 };
