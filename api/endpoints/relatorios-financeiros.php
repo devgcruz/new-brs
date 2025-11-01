@@ -44,15 +44,18 @@ switch ($method) {
             $where_conditions = [];
             $params = [];
             
-            // Filtro por data (usando data de criação da entrada)
+            // Filtro por data (usando data de criação da entrada ou data do financeiro)
             if (!empty($data_inicio)) {
-                $where_conditions[] = "e.DATA_ENTRADA >= :data_inicio";
+                // Filtrar por data de criação da entrada ou data de criação do financeiro
+                $where_conditions[] = "(e.DATA_ENTRADA >= :data_inicio OR f.created_at >= :data_inicio)";
                 $params['data_inicio'] = $data_inicio;
             }
             
             if (!empty($data_fim)) {
-                $where_conditions[] = "e.DATA_ENTRADA <= :data_fim";
-                $params['data_fim'] = $data_fim;
+                // Adicionar 1 dia para incluir o dia inteiro
+                $data_fim_extended = date('Y-m-d', strtotime($data_fim . ' +1 day'));
+                $where_conditions[] = "(e.DATA_ENTRADA < :data_fim OR f.created_at < :data_fim)";
+                $params['data_fim'] = $data_fim_extended;
             }
             
             // Filtro por status (usando status do financeiro)
@@ -63,20 +66,34 @@ switch ($method) {
             
             $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
             
-            // Contar total de entradas que têm lançamentos financeiros
+            // Contar total de lançamentos financeiros (CORREÇÃO: Contar financeiros, não entradas)
             $count_sql = "
-                SELECT COUNT(DISTINCT e.Id_Entrada) as total 
-                FROM $entradas_table e 
-                INNER JOIN $financeiros_table f ON e.Id_Entrada = f.ID_ENTRADA 
+                SELECT COUNT(DISTINCT f.Id_Financeiro) as total 
+                FROM $financeiros_table f 
+                LEFT JOIN $entradas_table e ON f.ID_ENTRADA = e.Id_Entrada 
                 $where_clause
             ";
             $count_stmt = $pdo->prepare($count_sql);
             $count_stmt->execute($params);
             $total = $count_stmt->fetch()['total'];
             
-            // Buscar entradas com seus lançamentos financeiros
+            // Buscar lançamentos financeiros diretamente (CORREÇÃO: Não agrupar por entrada)
+            // Aplicar filtros diretamente na consulta SQL principal (CORREÇÃO: Filtros aplicados aqui)
             $sql = "
-                SELECT DISTINCT
+                SELECT 
+                    f.Id_Financeiro,
+                    f.ID_ENTRADA,
+                    f.VALOR_TOTAL_RECIBO as valor_total_recibo,
+                    f.VALOR_NOTA_FISCAL as valor_nota_fiscal,
+                    f.StatusPG as status_pagamento,
+                    f.DATA_NOTA_FISCAL as data_nota_fiscal_alt,
+                    f.DATA_PAGAMENTO_RECIBO as data_pagamento_recibo,
+                    f.DATA_PAGAMENTO_NOTA_FISCAL as data_pagamento_nota_fiscal,
+                    f.NUMERO_NOTA_FISCAL as numero_nota_fiscal,
+                    f.OBSERVACOES as observacao,
+                    f.NUMERO_RECIBO as numero_recibo,
+                    f.created_at,
+                    f.updated_at,
                     e.Id_Entrada as entrada_id,
                     e.PLACA,
                     e.VEICULO,
@@ -89,11 +106,12 @@ switch ($method) {
                     e.SITUACAO,
                     e.POSICAO,
                     e.UF,
-                    e.CIDADE
-                FROM $entradas_table e 
-                INNER JOIN $financeiros_table f ON e.Id_Entrada = f.ID_ENTRADA 
+                    e.CIDADE,
+                    e.PROTOCOLO
+                FROM $financeiros_table f 
+                LEFT JOIN $entradas_table e ON f.ID_ENTRADA = e.Id_Entrada 
                 $where_clause 
-                ORDER BY e.DATA_ENTRADA DESC, e.Id_Entrada DESC
+                ORDER BY f.created_at DESC
                 LIMIT :offset, :per_page
             ";
             
@@ -106,90 +124,64 @@ switch ($method) {
             }
             
             $stmt->execute();
-            $entradas = $stmt->fetchAll();
+            $financeiros = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
-            // Para cada entrada, buscar seus lançamentos financeiros
+            // Agrupar por entrada para manter a estrutura esperada pelo frontend
             $relatorios = [];
-            foreach ($entradas as $entrada) {
-                $financeiros_sql = "
-                    SELECT 
-                        f.*,
-                        f.VALOR_TOTAL_RECIBO as valor_total_recibo,
-                        f.VALOR_NOTA_FISCAL as valor_nota_fiscal,
-                        f.StatusPG as status_pagamento,
-                        f.DATA_NOTA_FISCAL as data_nota_fiscal_alt,
-                        f.DATA_PAGAMENTO_RECIBO as data_pagamento_recibo,
-                        f.DATA_PAGAMENTO_NOTA_FISCAL as data_pagamento_nota_fiscal,
-                        f.NUMERO_NOTA_FISCAL as numero_nota_fiscal,
-                        f.OBSERVACOES as observacao,
-                        f.created_at,
-                        f.updated_at
-                    FROM $financeiros_table f 
-                    WHERE f.ID_ENTRADA = :entrada_id 
-                    ORDER BY f.created_at DESC
-                ";
+            $entradas_agrupadas = [];
+            
+            foreach ($financeiros as $financeiro) {
+                $entrada_id = $financeiro['entrada_id'] ?? null;
                 
-                $financeiros_stmt = $pdo->prepare($financeiros_sql);
-                $financeiros_stmt->execute(['entrada_id' => $entrada['entrada_id']]);
-                $financeiros = $financeiros_stmt->fetchAll();
-                
-                // Aplicar filtros adicionais nos financeiros se necessário
-                $financeiros_filtrados = $financeiros;
-                if (!empty($status) && $status !== 'todos') {
-                    $financeiros_filtrados = array_filter($financeiros, function($fin) use ($status) {
-                        return $fin['status_pagamento'] === $status;
-                    });
+                // Se não houver entrada_id, pular este registro
+                if (empty($entrada_id)) {
+                    continue;
                 }
                 
-                // Aplicar filtro de data nos financeiros se necessário
-                if (!empty($data_inicio) || !empty($data_fim)) {
-                    $financeiros_filtrados = array_filter($financeiros_filtrados, function($fin) use ($data_inicio, $data_fim) {
-                        $datas_para_verificar = [
-                            $fin['data_pagamento_recibo'],
-                            $fin['data_pagamento_nota_fiscal'],
-                            $fin['data_nota_fiscal_alt'],
-                            $fin['created_at']
-                        ];
-                        
-                        // Remover valores nulos/vazios
-                        $datas_para_verificar = array_filter($datas_para_verificar, function($data) {
-                            return !empty($data);
-                        });
-                        
-                        if (empty($datas_para_verificar)) {
-                            return true;
-                        }
-                        
-                        foreach ($datas_para_verificar as $data) {
-                            $data_lancamento = new DateTime($data);
-                            
-                            if (!empty($data_inicio)) {
-                                $data_inicio_obj = new DateTime($data_inicio);
-                                if ($data_lancamento < $data_inicio_obj) continue;
-                            }
-                            
-                            if (!empty($data_fim)) {
-                                $data_fim_obj = new DateTime($data_fim);
-                                if ($data_lancamento > $data_fim_obj) continue;
-                            }
-                            
-                            return true;
-                        }
-                        
-                        return false;
-                    });
+                // Criar estrutura da entrada se não existir
+                if (!isset($entradas_agrupadas[$entrada_id])) {
+                    $entradas_agrupadas[$entrada_id] = [
+                        'entrada_id' => $entrada_id,
+                        'placa' => $financeiro['PLACA'] ?? null,
+                        'veiculo' => $financeiro['VEICULO'] ?? null,
+                        'marca' => $financeiro['MARCA'] ?? null,
+                        'seguradora' => $financeiro['SEGURADORA'] ?? null,
+                        'chassi' => $financeiro['CHASSI'] ?? null,
+                        'cod_sinistro' => $financeiro['COD_SINISTRO'] ?? null,
+                        'data_entrada' => $financeiro['DATA_ENTRADA'] ?? null,
+                        'data_registro' => $financeiro['data_registro'] ?? null,
+                        'situacao' => $financeiro['SITUACAO'] ?? null,
+                        'posicao' => $financeiro['POSICAO'] ?? null,
+                        'uf' => $financeiro['UF'] ?? null,
+                        'cidade' => $financeiro['CIDADE'] ?? null,
+                        'protocolo' => $financeiro['PROTOCOLO'] ?? null
+                    ];
                 }
                 
-                $relatorios[] = [
-                    'entrada' => $entrada,
-                    'financeiros' => array_values($financeiros_filtrados)
+                // Adicionar financeiro ao array de financeiros da entrada
+                if (!isset($relatorios[$entrada_id])) {
+                    $relatorios[$entrada_id] = [
+                        'entrada' => $entradas_agrupadas[$entrada_id],
+                        'financeiros' => []
+                    ];
+                }
+                
+                $relatorios[$entrada_id]['financeiros'][] = [
+                    'Id_Financeiro' => $financeiro['Id_Financeiro'],
+                    'valor_total_recibo' => $financeiro['valor_total_recibo'],
+                    'valor_nota_fiscal' => $financeiro['valor_nota_fiscal'],
+                    'status_pagamento' => $financeiro['status_pagamento'],
+                    'data_nota_fiscal_alt' => $financeiro['data_nota_fiscal_alt'],
+                    'data_pagamento_recibo' => $financeiro['data_pagamento_recibo'],
+                    'data_pagamento_nota_fiscal' => $financeiro['data_pagamento_nota_fiscal'],
+                    'numero_nota_fiscal' => $financeiro['numero_nota_fiscal'],
+                    'observacao' => $financeiro['observacao'],
+                    'created_at' => $financeiro['created_at'],
+                    'updated_at' => $financeiro['updated_at']
                 ];
             }
             
-            // Filtrar apenas relatórios que têm lançamentos financeiros após filtros
-            $relatorios_filtrados = array_filter($relatorios, function($relatorio) {
-                return count($relatorio['financeiros']) > 0;
-            });
+            $relatorios_filtrados = array_values($relatorios);
             
             $last_page = ceil($total / $per_page);
             

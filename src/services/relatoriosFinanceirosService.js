@@ -1,4 +1,6 @@
 import { API_CONFIG, makeRequest } from '../config/api.js';
+import * as XLSX from 'xlsx';
+
 const API_BASE_URL = API_CONFIG.BASE_URL;
 
 // Usar a função makeRequest do config/api.js que já tem toda a lógica de retry e tratamento de erros
@@ -88,47 +90,70 @@ const relatoriosFinanceirosService = {
         throw new Error(dadosResponse.message);
       }
 
-      // Importar XLSX dinamicamente
-      const { default: XLSX } = await import('xlsx');
-      
-      // Preparar dados para exportação
+      // Preparar dados para exportação no formato solicitado
       const dadosTabela = [];
       
       dadosResponse.data.forEach((relatorio) => {
         const { entrada, financeiros } = relatorio;
         
-        if (financeiros.length === 0) {
+        // Normalizar nomes de campos (suportar maiúsculas e minúsculas)
+        const entradaData = {
+          data_registro: entrada.data_registro || entrada.data_entrada || entrada.DATA_ENTRADA || entrada.created_at,
+          veiculo: entrada.veiculo || entrada.VEICULO || '-',
+          placa: entrada.placa || entrada.PLACA || '-',
+          chassi: entrada.chassi || entrada.CHASSI || '-',
+          cod_sinistro: entrada.cod_sinistro || entrada.COD_SINISTRO || entrada.N_Sinistro || '-'
+        };
+        
+        if (!financeiros || financeiros.length === 0) {
           // Se não há lançamentos financeiros
           dadosTabela.push({
-            'Data': this.formatarData(entrada.data_registro),
-            'Veículo': entrada.veiculo || '-',
-            'Placa': entrada.placa || '-',
-            'Chassi': entrada.chassi || '-',
-            'Sinistro': entrada.cod_sinistro || '-',
+            'Data': this.formatarData(entradaData.data_registro),
+            'Veículo': entradaData.veiculo,
+            'Placa': entradaData.placa,
+            'Chassi': entradaData.chassi,
+            'Sinistro': entradaData.cod_sinistro,
             'Despesas': '-',
+            'Data da Despesa': '-',
             'Data Pagto Despesas': '-',
             'Nota Fiscal': '-',
+            'Data da Nota Fiscal': '-',
             'Honorários': '-',
             'Data Pagto Honorários': '-',
             'Status': '-',
             'Observações': '-'
           });
         } else {
-          // Para cada lançamento financeiro
+          // Para cada lançamento financeiro - criar uma linha por lançamento
           financeiros.forEach((financeiro) => {
+            // Normalizar nomes de campos do financeiro
+            const finData = {
+              valor_total_recibo: financeiro.valor_total_recibo || financeiro.VALOR_TOTAL_RECIBO || 0,
+              valor_nota_fiscal: financeiro.valor_nota_fiscal || financeiro.VALOR_NOTA_FISCAL || 0,
+              data_nota_fiscal: financeiro.data_nota_fiscal_alt || financeiro.data_nota_fiscal || financeiro.DATA_NOTA_FISCAL || financeiro.created_at || null,
+              data_nota_fiscal_honorarios: financeiro.data_nota_fiscal_alt || financeiro.data_nota_fiscal || financeiro.DATA_NOTA_FISCAL || null,
+              data_pagamento_recibo: financeiro.data_pagamento_recibo || financeiro.DATA_PAGAMENTO_RECIBO || null,
+              data_pagamento_nota_fiscal: financeiro.data_pagamento_nota_fiscal || financeiro.DATA_PAGAMENTO_NOTA_FISCAL || null,
+              numero_nota_fiscal: financeiro.numero_nota_fiscal || financeiro.NUMERO_NOTA_FISCAL || '-',
+              status_pagamento: financeiro.status_pagamento || financeiro.StatusPG || financeiro.status_pg || 'Pendente',
+              observacao: financeiro.observacao || financeiro.OBSERVACOES || financeiro.observacoes || '-'
+            };
+            
             dadosTabela.push({
-              'Data': this.formatarData(entrada.data_registro),
-              'Veículo': entrada.veiculo || '-',
-              'Placa': entrada.placa || '-',
-              'Chassi': entrada.chassi || '-',
-              'Sinistro': entrada.cod_sinistro || '-',
-              'Despesas': this.formatarMoeda(financeiro.valor_total_recibo),
-              'Data Pagto Despesas': this.formatarData(financeiro.data_pagamento_recibo),
-              'Nota Fiscal': financeiro.numero_nota_fiscal || '-',
-              'Honorários': this.formatarMoeda(financeiro.valor_nota_fiscal),
-              'Data Pagto Honorários': this.formatarData(financeiro.data_pagamento_nota_fiscal),
-              'Status': financeiro.status_pagamento || 'Pendente',
-              'Observações': financeiro.observacao || financeiro.OBSERVACOES || '-'
+              'Data': this.formatarData(entradaData.data_registro),
+              'Veículo': entradaData.veiculo,
+              'Placa': entradaData.placa,
+              'Chassi': entradaData.chassi,
+              'Sinistro': entradaData.cod_sinistro,
+              'Despesas': finData.valor_total_recibo ? this.formatarMoeda(finData.valor_total_recibo) : '-',
+              'Data da Despesa': this.formatarData(finData.data_nota_fiscal),
+              'Data Pagto Despesas': this.formatarData(finData.data_pagamento_recibo),
+              'Nota Fiscal': finData.numero_nota_fiscal,
+              'Data da Nota Fiscal': this.formatarData(finData.data_nota_fiscal_honorarios),
+              'Honorários': finData.valor_nota_fiscal ? this.formatarMoeda(finData.valor_nota_fiscal) : '-',
+              'Data Pagto Honorários': this.formatarData(finData.data_pagamento_nota_fiscal),
+              'Status': finData.status_pagamento,
+              'Observações': finData.observacao
             });
           });
         }
@@ -147,8 +172,10 @@ const relatoriosFinanceirosService = {
         { wch: 20 }, // Chassi
         { wch: 15 }, // Sinistro
         { wch: 18 }, // Despesas
+        { wch: 18 }, // Data da Despesa
         { wch: 20 }, // Data Pagto Despesas
         { wch: 15 }, // Nota Fiscal
+        { wch: 18 }, // Data da Nota Fiscal
         { wch: 18 }, // Honorários
         { wch: 22 }, // Data Pagto Honorários
         { wch: 15 }, // Status
@@ -347,6 +374,10 @@ const relatoriosFinanceirosService = {
     if (!data) return '-';
     try {
       const date = new Date(data);
+      // Verificar se a data é inválida
+      if (isNaN(date.getTime())) {
+        return '-';
+      }
       return date.toLocaleDateString('pt-BR');
     } catch (error) {
       return '-';
