@@ -52,7 +52,6 @@ $routes = [
     'seguradoras' => 'endpoints/seguradoras.php',
     'financeiro' => 'endpoints/financeiro.php',
     'relatorios-financeiros' => 'endpoints/relatorios-financeiros.php',
-    'relatorio-financeiro-agrupado' => 'endpoints/relatorio-financeiro-agrupado.php',
     'judicial' => 'endpoints/judicial.php',
     'pdfs' => 'endpoints/pdfs.php',
     'observacoes' => 'endpoints/observacoes.php',

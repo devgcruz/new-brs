@@ -18,7 +18,6 @@ import PrestadoresPage from './pages/PrestadoresPage';
 import RelatoriosPage from './pages/RelatoriosPage';
 import RelatoriosFinanceiroPage from './pages/RelatoriosFinanceiroPage';
 import RelatorioEntradaPage from './pages/RelatorioEntradaPage';
-import RelatorioFinanceiroAgrupadoPage from './pages/RelatorioFinanceiroAgrupadoPage';
 import UsuariosPage from './pages/UsuariosPage';
 import ColaboradoresPage from './pages/ColaboradoresPage';
 import PosicoesPage from './pages/PosicoesPage';
@@ -180,16 +179,6 @@ function App() {
             <ProtectedRoute>
               <DashboardLayout>
                 <RelatorioEntradaPage />
-              </DashboardLayout>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/dashboard/relatorios/financeiro-agrupado" element={
-            <ProtectedRoute>
-              <DashboardLayout>
-                <PermissionRoute permission="acessar-relatorios">
-                  <RelatorioFinanceiroAgrupadoPage />
-                </PermissionRoute>
               </DashboardLayout>
             </ProtectedRoute>
           } />

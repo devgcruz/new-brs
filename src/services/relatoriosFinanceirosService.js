@@ -102,7 +102,8 @@ const relatoriosFinanceirosService = {
           veiculo: entrada.veiculo || entrada.VEICULO || '-',
           placa: entrada.placa || entrada.PLACA || '-',
           chassi: entrada.chassi || entrada.CHASSI || '-',
-          cod_sinistro: entrada.cod_sinistro || entrada.COD_SINISTRO || entrada.N_Sinistro || '-'
+          cod_sinistro: entrada.cod_sinistro || entrada.COD_SINISTRO || entrada.N_Sinistro || '-',
+          seguradora: entrada.seguradora || entrada.SEGURADORA || '-'
         };
         
         if (!financeiros || financeiros.length === 0) {
@@ -113,6 +114,7 @@ const relatoriosFinanceirosService = {
             'Placa': entradaData.placa,
             'Chassi': entradaData.chassi,
             'Sinistro': entradaData.cod_sinistro,
+            'Seguradora': entradaData.seguradora,
             'Despesas': '-',
             'Data da Despesa': '-',
             'Data Pagto Despesas': '-',
@@ -145,6 +147,7 @@ const relatoriosFinanceirosService = {
               'Placa': entradaData.placa,
               'Chassi': entradaData.chassi,
               'Sinistro': entradaData.cod_sinistro,
+              'Seguradora': entradaData.seguradora,
               'Despesas': finData.valor_total_recibo ? this.formatarMoeda(finData.valor_total_recibo) : '-',
               'Data da Despesa': this.formatarData(finData.data_nota_fiscal),
               'Data Pagto Despesas': this.formatarData(finData.data_pagamento_recibo),
@@ -171,6 +174,7 @@ const relatoriosFinanceirosService = {
         { wch: 12 }, // Placa
         { wch: 20 }, // Chassi
         { wch: 15 }, // Sinistro
+        { wch: 25 }, // Seguradora
         { wch: 18 }, // Despesas
         { wch: 18 }, // Data da Despesa
         { wch: 20 }, // Data Pagto Despesas
@@ -381,31 +385,6 @@ const relatoriosFinanceirosService = {
       return date.toLocaleDateString('pt-BR');
     } catch (error) {
       return '-';
-    }
-  },
-
-  /**
-   * Busca o relatório financeiro AGRUPADO POR ENTRADA.
-   * @param {Object} filters - Filtros, ex: { data_inicio, data_fim }
-   * @returns {Promise<Object>} Resposta da API
-   */
-  async getRelatorioAgrupado(filters = {}) {
-    try {
-      const params = new URLSearchParams();
-      if (filters.data_inicio) params.append('data_inicio', filters.data_inicio);
-      if (filters.data_fim) params.append('data_fim', filters.data_fim);
-      
-      const queryString = params.toString();
-      const response = await makeAuthenticatedRequest(`/relatorio-financeiro-agrupado${queryString ? `?${queryString}` : ''}`);
-      
-      return {
-        success: true,
-        data: response.data || [],
-        meta: response.meta || { total: response.data?.length || 0 }
-      };
-    } catch (error) {
-      console.error('Erro ao buscar relatório financeiro agrupado:', error);
-      return { success: false, data: [], message: error.message };
     }
   }
 };

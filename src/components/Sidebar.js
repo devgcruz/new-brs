@@ -24,8 +24,7 @@ import {
   ExpandLess as ExpandLessIcon,
   ExpandMore as ExpandMoreIcon,
   Settings as SettingsIcon,
-  TrendingUp as FinanceiroIcon,
-  BarChart as BarChartIcon
+  TrendingUp as FinanceiroIcon
 } from '@mui/icons-material';
 import useAuthStore from '../store/authStore';
 
@@ -54,12 +53,6 @@ const relatoriosSubItems = [
     icon: <FinanceiroIcon />,
     path: '/dashboard/relatorios/financeiro',
     permission: 'relatorios'
-  },
-  {
-    text: 'Financeiro Agrupado',
-    icon: <BarChartIcon />,
-    path: '/dashboard/relatorios/financeiro-agrupado',
-    permission: 'acessar-relatorios'
   },
   {
     text: 'Entradas',
