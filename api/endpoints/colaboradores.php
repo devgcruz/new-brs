@@ -96,49 +96,59 @@ switch ($method) {
         break;
         
     case 'POST':
-        // Criar novo colaborador
-        $input = file_get_contents('php://input');
-        $data = json_decode($input, true);
-        
-        if (!$data) {
-            respostaJson(false, null, 'Dados JSON inválidos', 400);
+        // 1. Ler o body JSON da requisição
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        // 2. Validar dados (exemplo)
+        if (empty($data['nome'])) {
+            respostaJson(false, null, 'O campo Nome é obrigatório', 422);
         }
         
-        validarDadosObrigatorios($data, ['nome']);
-        
+        $tableName = getTableName('colaboradores');
+
         try {
-            $sql = "INSERT INTO colaboradores (
-                nome, cpf, email, telefone, cargo, departamento, 
-                data_admissao, salario, status, observacoes, created_at, updated_at
-            ) VALUES (
-                :nome, :cpf, :email, :telefone, :cargo, :departamento,
-                :data_admissao, :salario, :status, :observacoes, NOW(), NOW()
-            )";
+            // 3. Preparar a consulta SQL INSERT (CORRIGIDA: sem cnh_path)
+            // Mapear campo de contato: frontend envia 'telefone', banco usa 'celular'
+            $valor_contato = $data['telefone'] ?? $data['celular'] ?? $data['contato'] ?? null;
+            
+            $sql = "INSERT INTO $tableName (nome, email, cpf, celular, created_at, updated_at) 
+                    VALUES (?, ?, ?, ?, NOW(), NOW())";
             
             $stmt = $pdo->prepare($sql);
+            
+            // 4. Executar com os dados do frontend (CORRIGIDO: sem cnh_path)
             $stmt->execute([
-                'nome' => sanitizar($data['nome']),
-                'cpf' => sanitizar($data['cpf'] ?? ''),
-                'email' => sanitizar($data['email'] ?? ''),
-                'telefone' => sanitizar($data['telefone'] ?? ''),
-                'cargo' => sanitizar($data['cargo'] ?? ''),
-                'departamento' => sanitizar($data['departamento'] ?? ''),
-                'data_admissao' => $data['data_admissao'] ?? date('Y-m-d'),
-                'salario' => $data['salario'] ?? null,
-                'status' => sanitizar($data['status'] ?? 'ativo'),
-                'observacoes' => sanitizar($data['observacoes'] ?? '')
+                $data['nome'] ?? null,
+                $data['email'] ?? null,
+                $data['cpf'] ?? null,
+                $valor_contato
             ]);
-            
-            $colaborador_id = $pdo->lastInsertId();
-            
+
+            // 5. Obter o ID do novo colaborador
+            $lastId = $pdo->lastInsertId();
+
+            // 6. Buscar o registro recém-criado para retornar ao frontend
+            $sqlGet = "SELECT * FROM $tableName WHERE id = ?";
+            $stmtGet = $pdo->prepare($sqlGet);
+            $stmtGet->execute([$lastId]);
+            $newData = $stmtGet->fetch();
+
+            // 7. Retornar sucesso
             logSimples('✅ Colaborador criado', [
-                'colaborador_id' => $colaborador_id,
+                'colaborador_id' => $lastId,
                 'nome' => $data['nome'],
-                'usuario' => $usuario['Usuario']
+                'usuario' => $usuario['Usuario'] ?? $usuario['username'] ?? 'sistema'
             ]);
             
-            respostaJson(true, ['id' => $colaborador_id], 'Colaborador criado com sucesso', 201);
-            
+            respostaJson(true, $newData, 'Colaborador cadastrado com sucesso', 201);
+
+        } catch (PDOException $e) {
+            // Tratar erros (ex: email/cpf duplicado)
+            if ($e->getCode() == 23000) { // Código de violação de constraint UNIQUE
+                respostaJson(false, null, 'Erro: Email ou CPF já pode estar em uso.', 409);
+            }
+            logSimples('❌ Erro ao criar colaborador', ['erro' => $e->getMessage()]);
+            respostaJson(false, null, 'Erro de banco de dados: ' . $e->getMessage(), 500);
         } catch (Exception $e) {
             logSimples('❌ Erro ao criar colaborador', ['erro' => $e->getMessage()]);
             respostaJson(false, null, 'Erro ao criar colaborador', 500);
@@ -146,48 +156,66 @@ switch ($method) {
         break;
         
     case 'PUT':
-        // Atualizar colaborador
-        $colaborador_id = $_GET['id'] ?? '';
-        
-        if (empty($colaborador_id)) {
-            respostaJson(false, null, 'ID do colaborador não especificado', 400);
+        // 1. Verificar se o ID foi fornecido na URL
+        if (!isset($_GET['id'])) {
+            respostaJson(false, null, 'ID do colaborador é obrigatório', 400);
         }
-        
-        $input = file_get_contents('php://input');
-        $data = json_decode($input, true);
-        
-        if (!$data) {
-            respostaJson(false, null, 'Dados JSON inválidos', 400);
+        $id = (int)$_GET['id'];
+
+        // 2. Ler o body da requisição (JSON)
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        // 3. Validar dados (simples)
+        if (empty($data['nome'])) {
+            respostaJson(false, null, 'O campo Nome é obrigatório', 422);
         }
-        
+
         try {
-            $campos_update = [];
-            $params = ['id' => $colaborador_id];
+            // 4. Preparar e executar o UPDATE
+            $tableName = getTableName('colaboradores');
             
-            foreach ($data as $campo => $valor) {
-                if (in_array($campo, ['nome', 'cpf', 'email', 'telefone', 'cargo', 'departamento', 'data_admissao', 'salario', 'status', 'observacoes'])) {
-                    $campos_update[] = "$campo = :$campo";
-                    $params[$campo] = sanitizar($valor);
-                }
-            }
+            // Mapear campo de contato: frontend envia 'telefone' (mapeado de 'contato'), banco usa 'celular'
+            $valor_contato = $data['telefone'] ?? $data['celular'] ?? $data['contato'] ?? null;
             
-            if (empty($campos_update)) {
-                respostaJson(false, null, 'Nenhum campo válido para atualizar', 400);
-            }
+            $sql = "UPDATE $tableName SET 
+                        nome = ?, 
+                        email = ?, 
+                        cpf = ?, 
+                        celular = ?,
+                        updated_at = NOW()
+                    WHERE id = ?"; 
             
-            $campos_update[] = "updated_at = NOW()";
-            
-            $sql = "UPDATE colaboradores SET " . implode(', ', $campos_update) . " WHERE id = :id";
             $stmt = $pdo->prepare($sql);
-            $stmt->execute($params);
             
+            $stmt->execute([
+                $data['nome'] ?? null,
+                $data['email'] ?? null,
+                $data['cpf'] ?? null,
+                $valor_contato,
+                $id
+            ]);
+
+            // 5. Buscar os dados atualizados para retornar ao frontend
+            $sqlGet = "SELECT * FROM $tableName WHERE id = ?";
+            $stmtGet = $pdo->prepare($sqlGet);
+            $stmtGet->execute([$id]);
+            $updatedData = $stmtGet->fetch();
+
+            // 6. Retornar sucesso (isto é crucial para o GenericCrudPage fechar o modal)
             logSimples('✅ Colaborador atualizado', [
-                'colaborador_id' => $colaborador_id,
-                'usuario' => $usuario['Usuario']
+                'colaborador_id' => $id,
+                'usuario' => $usuario['Usuario'] ?? $usuario['username'] ?? 'sistema'
             ]);
             
-            respostaJson(true, null, 'Colaborador atualizado com sucesso');
-            
+            respostaJson(true, $updatedData, 'Colaborador atualizado com sucesso');
+
+        } catch (PDOException $e) {
+            // Tratar erros de SQL (ex: email/cpf duplicado)
+            if ($e->getCode() == 23000) {
+                 respostaJson(false, null, 'Erro: Email ou CPF já pode estar em uso.', 409);
+            }
+            logSimples('❌ Erro ao atualizar colaborador', ['erro' => $e->getMessage()]);
+            respostaJson(false, null, 'Erro de banco de dados: ' . $e->getMessage(), 500);
         } catch (Exception $e) {
             logSimples('❌ Erro ao atualizar colaborador', ['erro' => $e->getMessage()]);
             respostaJson(false, null, 'Erro ao atualizar colaborador', 500);
