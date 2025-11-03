@@ -77,9 +77,9 @@ switch ($method) {
                 }
                 
                 $campos_update[] = "email = :email";
-                $campos_update[] = "Usuario = :usuario"; // Atualizar também o campo Usuario
+                // NÃO atualizar o campo Usuario automaticamente - manter o valor original
+                // O campo Usuario só deve ser alterado por administradores
                 $params['email'] = sanitizar($data['email']);
-                $params['usuario'] = sanitizar($data['email']);
             }
             
             if (empty($campos_update)) {
@@ -92,12 +92,31 @@ switch ($method) {
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
             
+            // Buscar dados atualizados do usuário
+            $sql_get = "SELECT id, nome, email, Usuario as usuario, nivel, cargo, status, profile_photo_path, ultimo_acesso, created_at FROM usuarios WHERE id = :id";
+            $stmt_get = $pdo->prepare($sql_get);
+            $stmt_get->execute(['id' => $usuario['id']]);
+            $usuario_atualizado = $stmt_get->fetch();
+            
             logSimples('✅ Perfil atualizado', [
                 'usuario_id' => $usuario['id'],
                 'usuario' => $usuario['Usuario']
             ]);
             
-            respostaJson(true, null, 'Perfil atualizado com sucesso!');
+            respostaJson(true, [
+                'id' => $usuario_atualizado['id'],
+                'nome' => $usuario_atualizado['nome'],
+                'email' => $usuario_atualizado['email'],
+                'usuario' => $usuario_atualizado['usuario'],
+                'nivel' => $usuario_atualizado['nivel'],
+                'cargo' => $usuario_atualizado['cargo'],
+                'status' => $usuario_atualizado['status'],
+                'profile_photo_path' => $usuario_atualizado['profile_photo_path'],
+                'profile_photo_url' => $usuario_atualizado['profile_photo_path'] ? 
+                    "/api/uploads/profile-photos/" . basename($usuario_atualizado['profile_photo_path']) : null,
+                'ultimo_acesso' => $usuario_atualizado['ultimo_acesso'],
+                'created_at' => $usuario_atualizado['created_at']
+            ], 'Perfil atualizado com sucesso!');
             
         } catch (Exception $e) {
             logSimples('❌ Erro ao atualizar perfil', ['erro' => $e->getMessage()]);

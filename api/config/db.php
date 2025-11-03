@@ -4,10 +4,17 @@
  * Substitua os valores pelas suas credenciais de hospedagem compartilhada
  */
 
-$DB_HOST = "localhost";
+//$DB_HOST = "brsdatabase.mysql.dbaas.com.br";
+//$DB_USER = "brsdatabase";
+//$DB_PASS = "pW57@pd05#";
+//$DB_NAME = "brsdatabase";
+
+
+$DB_HOST = "127.0.0.1";
 $DB_USER = "root";
 $DB_PASS = "";
 $DB_NAME = "brs_database_target";
+
 
 try {
     $pdo = new PDO("mysql:host=$DB_HOST;dbname=$DB_NAME;charset=utf8", $DB_USER, $DB_PASS);
@@ -22,3 +29,4 @@ try {
     ]);
     exit;
 }
+?>

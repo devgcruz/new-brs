@@ -76,7 +76,7 @@ date_default_timezone_set('America/Sao_Paulo');
 // Configurações de Session (se necessário)
 ini_set('session.cookie_httponly', 1);
 ini_set('session.use_only_cookies', 1);
-ini_set('session.cookie_secure', 1);
+ini_set('session.cookie_secure', 0);  // 0 em dev (HTTP local), 1 em produção (HTTPS)
 
 // Configurações de Error Reporting
 if ($API_ENVIRONMENT === 'production') {
@@ -98,16 +98,30 @@ ini_set('upload_max_filesize', '10M');
 ini_set('post_max_size', '10M');
 ini_set('max_file_uploads', 20);
 
-// Headers de Segurança
-header('X-Content-Type-Options: nosniff');
-header('X-Frame-Options: DENY');
-header('X-XSS-Protection: 1; mode=block');
-header('Referrer-Policy: strict-origin-when-cross-origin');
+// Headers de Segurança (relaxados em desenvolvimento)
+if ($API_ENVIRONMENT === 'production') {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('X-XSS-Protection: 1; mode=block');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+} else {
+    // Headers mais permissivos para desenvolvimento
+    header('X-Content-Type-Options: nosniff');
+}
 
 // Configurações de CORS Dinâmico
 if (isset($_SERVER['HTTP_ORIGIN'])) {
     $origin = $_SERVER['HTTP_ORIGIN'];
-    if (in_array($origin, $CORS_ORIGINS)) {
+    if ($API_ENVIRONMENT === 'development') {
+        // Em desenvolvimento, aceita qualquer localhost
+        if (preg_match('/^http:\/\/localhost(:\d+)?$/', $origin) || 
+            preg_match('/^http:\/\/127\.0\.0\.1(:\d+)?$/', $origin)) {
+            header("Access-Control-Allow-Origin: $origin");
+            header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+            header("Access-Control-Allow-Headers: Content-Type, Authorization");
+            header("Access-Control-Allow-Credentials: true");
+        }
+    } elseif (in_array($origin, $CORS_ORIGINS)) {
         header("Access-Control-Allow-Origin: $origin");
     }
 }

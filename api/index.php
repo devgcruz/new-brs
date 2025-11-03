@@ -41,6 +41,7 @@ $routes = [
     // Perfil do usuário
     'profile' => 'endpoints/profile.php',
     'profile/change-password' => 'endpoints/profile-change-password.php',
+    'profile-change-password' => 'endpoints/profile-change-password.php',
     
     // CRUD endpoints
     'entradas' => 'endpoints/entradas.php',
@@ -76,6 +77,7 @@ $routes = [
     // Funcionalidades específicas de Entradas
     'entradas/check-placa' => 'endpoints/entradas-check-placa.php',
     'entradas/statistics' => 'endpoints/entradas-statistics.php',
+    'entrada-completa' => 'endpoints/entrada-completa.php',
     
     // Funcionalidades específicas de Usuários
     'usuarios/roles' => 'endpoints/usuarios-roles.php',

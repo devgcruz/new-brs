@@ -43,9 +43,9 @@ const RelatorioEntradaPage = () => {
   // Calcular estatísticas
   const stats = useMemo(() => {
     const total = entradas.length;
-    const pendentes = entradas.filter(e => e.situacao === 'Pendente').length;
-    const emAndamento = entradas.filter(e => e.situacao === 'Em Andamento').length;
-    const finalizados = entradas.filter(e => e.situacao === 'Finalizado').length;
+    const pendentes = entradas.filter(e => (e.SITUACAO || e.situacao) === 'Pendente').length;
+    const emAndamento = entradas.filter(e => (e.SITUACAO || e.situacao) === 'Em Andamento').length;
+    const finalizados = entradas.filter(e => (e.SITUACAO || e.situacao) === 'Finalizado').length;
 
     return { total, pendentes, emAndamento, finalizados };
   }, [entradas]);
@@ -66,7 +66,7 @@ const RelatorioEntradaPage = () => {
           const inicio = new Date(filtros.dataInicio);
           const fim = new Date(filtros.dataFim);
           dados = dados.filter(item => {
-            const dataRegistro = new Date(item.data_registro);
+            const dataRegistro = new Date(item.DATA_ENTRADA || item.data_entrada || item.data_registro);
             return dataRegistro >= inicio && dataRegistro <= fim;
           });
         }
@@ -98,27 +98,27 @@ const RelatorioEntradaPage = () => {
   // Função para exportar para Excel
   const exportarParaExcel = () => {
     const dadosExportacao = entradas.map(e => ({
-      'Id Entrada': e.id,
-      'Dt Entrada': formatarData(e.dt_entrada),
-      'Marca': e.marca || '-',
-      'Veículo': e.veiculo || '-',
-      'Placa': e.placa || '-',
-      'Chassi': e.chassi || '-',
-      'Ano Veículo': e.ano_veiculo || '-',
-      'Cód Sinistro': e.cod_sinistro || '-',
-      'Núm BO': e.num_bo || '-',
-      'UF Sinistro': e.uf_sinistro || '-',
-      'Cidade Sinistro': e.cidade_sinistro || '-',
-      'Seguradora': e.seguradora || '-',
-      'Colaborador': e.colaborador || '-',
-      'Posição': e.posicao || '-',
-      'Situação': e.situacao || '-',
-      'UF': e.uf || '-',
-      'Cidade': e.cidade || '-',
-      'Data Registro': formatarData(e.data_registro),
-      'Data Alteração': formatarData(e.updated_at),
-      'Tipo': e.tipo || '-',
-      'Núm Processo': e.numero_processo || '-'
+      'Id Entrada': e.id || e.Id_Entrada || '-',
+      'Dt Entrada': formatarData(e.DATA_ENTRADA || e.data_entrada || e.dt_entrada),
+      'Marca': e.MARCA || e.marca || '-',
+      'Veículo': e.VEICULO || e.veiculo || '-',
+      'Placa': e.PLACA || e.placa || '-',
+      'Chassi': e.CHASSI || e.chassi || '-',
+      'Ano Veículo': e.ANO_VEIC || e.ano_veiculo || e.ANO_VEICULO || '-',
+      'Cód Sinistro': e.COD_SINISTRO || e.cod_sinistro || '-',
+      'Núm BO': e.NUM_BO || e.num_bo || e.NUMERO_BO || '-',
+      'UF Sinistro': e.UF_SINISTRO || e.uf_sinistro || '-',
+      'Cidade Sinistro': e.CIDADE_SINISTRO || e.cidade_sinistro || '-',
+      'Seguradora': e.SEGURADORA || e.seguradora || '-',
+      'Colaborador': e.colaborador?.nome || e.COLABORADOR || e.colaborador || '-',
+      'Posição': e.POSICAO || e.posicao || '-',
+      'Situação': e.SITUACAO || e.situacao || '-',
+      'UF': e.UF || e.uf || '-',
+      'Cidade': e.CIDADE || e.cidade || '-',
+      'Data Registro': formatarData(e.created_at || e.CREATED_AT || e.data_registro),
+      'Data Alteração': formatarData(e.updated_at || e.UPDATED_AT),
+      'Tipo': e.TIPO || e.tipo || '-',
+      'Núm Processo': e.NUMERO_PROCESSO || e.numero_processo || '-'
     }));
 
     const result = exportToExcel(dadosExportacao, 'Relatorio_Entradas');
@@ -266,20 +266,20 @@ const RelatorioEntradaPage = () => {
           </TableHead>
           <TableBody>
             {entradas.map((entrada) => (
-              <TableRow hover key={entrada.id}>
-                <TableCell>{entrada.id}</TableCell>
-                <TableCell>{formatarData(entrada.dt_entrada)}</TableCell>
-                <TableCell>{entrada.veiculo || '-'}</TableCell>
-                <TableCell>{entrada.placa || '-'}</TableCell>
-                <TableCell>{entrada.num_bo || '-'}</TableCell>
-                <TableCell>{entrada.cod_sinistro || '-'}</TableCell>
+              <TableRow hover key={entrada.id || entrada.Id_Entrada}>
+                <TableCell>{entrada.id || entrada.Id_Entrada || '-'}</TableCell>
+                <TableCell>{formatarData(entrada.DATA_ENTRADA || entrada.data_entrada || entrada.dt_entrada)}</TableCell>
+                <TableCell>{entrada.VEICULO || entrada.veiculo || '-'}</TableCell>
+                <TableCell>{entrada.PLACA || entrada.placa || '-'}</TableCell>
+                <TableCell>{entrada.NUM_BO || entrada.num_bo || entrada.NUMERO_BO || '-'}</TableCell>
+                <TableCell>{entrada.COD_SINISTRO || entrada.cod_sinistro || '-'}</TableCell>
                 <TableCell>
                   <Chip 
-                    label={entrada.situacao || 'Indefinido'}
+                    label={entrada.SITUACAO || entrada.situacao || 'Indefinido'}
                     size="small"
                   />
                 </TableCell>
-                <TableCell>{formatarData(entrada.updated_at)}</TableCell>
+                <TableCell>{formatarData(entrada.updated_at || entrada.UPDATED_AT)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

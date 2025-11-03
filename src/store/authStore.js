@@ -190,7 +190,16 @@ const useAuthStore = create((set, get) => ({
 
   // Atualiza dados do usuário
   updateUser: (updatedUser) => {
-    set({ user: updatedUser });
+    if (updatedUser) {
+      // Atualizar o estado
+      set({ user: updatedUser });
+      // Atualizar também o localStorage para manter consistência
+      try {
+        localStorage.setItem('user_data', JSON.stringify(updatedUser));
+      } catch (error) {
+        console.error('Erro ao atualizar user_data no localStorage:', error);
+      }
+    }
   },
 
   // Limpa erros

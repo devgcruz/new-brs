@@ -27,6 +27,7 @@ import {
   Save as SaveIcon,
   AttachFile as AttachFileIcon,
   Delete as DeleteIcon,
+  Print as PrintIcon,
 } from '@mui/icons-material';
 import PdfModal from './PdfModal';
 import FinanceiroTab from './financeiro/FinanceiroTab';
@@ -37,6 +38,8 @@ import { validatePlaca } from '../utils/placaValidator';
 import EnhancedNotification from './EnhancedNotification';
 import useNotification from '../hooks/useNotification';
 import ValidationAlert from './ValidationAlert';
+import { generateEntradaReport } from '../utils/reportGenerator';
+import useAuthStore from '../store/authStore';
 
 // Estado inicial vazio para o formulário (apenas campos de texto)
 const initialState = {
@@ -53,11 +56,15 @@ const EditarRegistroModal = ({ open, onClose, onSave, onDelete, registroData }) 
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [validationErrors, setValidationErrors] = useState({});
   
   // Hook para notificações melhoradas
   const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
+  
+  // Obter usuário logado para o relatório
+  const usuarioLogado = useAuthStore((state) => state.user);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -229,6 +236,32 @@ const EditarRegistroModal = ({ open, onClose, onSave, onDelete, registroData }) 
   const handleClosePdfModal = useCallback(() => {
     setPdfModalOpen(false);
   }, []);
+
+  // Handler para gerar relatório PDF
+  const handleGenerateReport = useCallback(async () => {
+    if (!registroData?.id && !registroData?.Id_Entrada) {
+      showError('ID do registro não encontrado');
+      return;
+    }
+
+    const registroId = registroData.id || registroData.Id_Entrada;
+    
+    setIsGeneratingReport(true);
+    try {
+      // 1. Busca os dados completos (com observações)
+      const dadosCompletos = await entradaService.getEntradaCompleta(registroId);
+
+      // 2. Gera o PDF no frontend
+      generateEntradaReport(dadosCompletos, usuarioLogado);
+      
+      showSuccess('Relatório gerado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao gerar relatório:', error);
+      showError(error.message || 'Erro ao gerar relatório. Tente novamente.');
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  }, [registroData, usuarioLogado, showSuccess, showError]);
 
   const handleOpenDeleteDialog = useCallback(() => {
     setDeleteDialogOpen(true);
@@ -1024,21 +1057,41 @@ const EditarRegistroModal = ({ open, onClose, onSave, onDelete, registroData }) 
         flexDirection: { xs: 'column', sm: 'row' },
         alignItems: { xs: 'stretch', sm: 'center' }
       }}>
-        {/* Botão de anexar documentos no canto esquerdo */}
-        <Button
-          onClick={handleOpenPdfModal}
-          variant="outlined"
-          startIcon={<AttachFileIcon />}
-          disabled={false}
-          sx={{ 
-            mr: { xs: 0, sm: 'auto' },
-            mb: { xs: 1, sm: 0 },
-            fontSize: { xs: '0.8rem', sm: '0.875rem' },
-            py: { xs: 1, sm: 1.5 }
-          }}
-        >
-          Documentos
-        </Button>
+        {/* Botões no canto esquerdo */}
+        <Box sx={{ 
+          display: 'flex', 
+          gap: { xs: 1, sm: 2 },
+          flexDirection: { xs: 'column', sm: 'row' },
+          mr: { xs: 0, sm: 'auto' },
+          mb: { xs: 1, sm: 0 },
+          width: { xs: '100%', sm: 'auto' }
+        }}>
+          <Button
+            onClick={handleOpenPdfModal}
+            variant="outlined"
+            startIcon={<AttachFileIcon />}
+            disabled={false}
+            sx={{ 
+              fontSize: { xs: '0.8rem', sm: '0.875rem' },
+              py: { xs: 1, sm: 1.5 }
+            }}
+          >
+            Documentos
+          </Button>
+          <Button
+            onClick={handleGenerateReport}
+            variant="outlined"
+            color="secondary"
+            startIcon={isGeneratingReport ? <CircularProgress size={20} color="inherit" /> : <PrintIcon />}
+            disabled={isGeneratingReport}
+            sx={{ 
+              fontSize: { xs: '0.8rem', sm: '0.875rem' },
+              py: { xs: 1, sm: 1.5 }
+            }}
+          >
+            {isGeneratingReport ? 'Gerando...' : 'Emitir Relatório'}
+          </Button>
+        </Box>
 
         {/* Botões de ação no canto direito */}
         <Box sx={{ 

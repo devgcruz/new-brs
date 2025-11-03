@@ -12,29 +12,22 @@ import {
   CardHeader,
   Divider,
   Alert,
-  CircularProgress,
-  IconButton,
-  Tooltip
+  CircularProgress
 } from '@mui/material';
 import {
   Person as PersonIcon,
   Email as EmailIcon,
   Lock as LockIcon,
-  Save as SaveIcon,
-  PhotoCamera as PhotoCameraIcon,
-  Edit as EditIcon
+  Save as SaveIcon
 } from '@mui/icons-material';
 import useAuthStore from '../store/authStore';
 import userService from '../services/userService';
-import ImageCropModal from '../components/ImageCropModal';
 
 const ProfilePage = () => {
   const { user, updateUser } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
-  const [showImageCrop, setShowImageCrop] = useState(false);
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
@@ -63,16 +56,6 @@ const ProfilePage = () => {
     }));
   };
 
-  const handlePhotoUpload = async (croppedImageFile) => {
-    // Funcionalidade temporariamente desabilitada
-    setMessage({ 
-      type: 'info', 
-      text: 'Funcionalidade de upload de foto está em construção. Em breve estará disponível!' 
-    });
-    setShowImageCrop(false);
-    return;
-  };
-
   const handleSave = async () => {
     setSaving(true);
     setMessage({ type: '', text: '' });
@@ -81,38 +64,88 @@ const ProfilePage = () => {
       // Validações básicas
       if (!formData.nome.trim()) {
         setMessage({ type: 'error', text: 'Nome é obrigatório' });
+        setSaving(false);
         return;
       }
 
       if (!formData.email.trim()) {
         setMessage({ type: 'error', text: 'Email é obrigatório' });
+        setSaving(false);
         return;
       }
 
+      // Validar formato de email
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email.trim())) {
+        setMessage({ type: 'error', text: 'Email inválido' });
+        setSaving(false);
+        return;
+      }
+
+      // Validações de senha
       if (formData.password && formData.password !== formData.confirmPassword) {
         setMessage({ type: 'error', text: 'Senhas não coincidem' });
+        setSaving(false);
+        return;
+      }
+
+      if (formData.password && formData.password.length < 8) {
+        setMessage({ type: 'error', text: 'A nova senha deve ter pelo menos 8 caracteres' });
+        setSaving(false);
         return;
       }
 
       if (formData.password && !formData.currentPassword) {
         setMessage({ type: 'error', text: 'Senha atual é obrigatória para alterar a senha' });
+        setSaving(false);
         return;
       }
 
-      // Preparar dados para envio
-      const updateData = {
-        nome: formData.nome.trim(),
-        email: formData.email.trim()
-      };
+      // Verificar se nome ou email foram alterados
+      const nomeMudou = formData.nome.trim() !== (user.nome || '');
+      const emailMudou = formData.email.trim() !== (user.email || '');
+      
+      // Preparar dados para envio apenas se nome ou email mudaram
+      if (nomeMudou || emailMudou) {
+        const updateData = {
+          nome: formData.nome.trim(),
+          email: formData.email.trim()
+        };
 
-      // Atualizar perfil básico
-      const updatedUser = await userService.updateProfile(updateData);
+        // Atualizar perfil básico apenas se houver mudanças
+        try {
+          const updatedUser = await userService.updateProfile(updateData);
+          
+          // Atualizar store com os dados atualizados
+          if (updatedUser) {
+            // Preservar dados adicionais que podem não vir do backend
+            const mergedUser = {
+              ...user,
+              ...updatedUser
+            };
+            updateUser(mergedUser);
+            
+            // Atualizar também os campos do formulário para refletir mudanças
+            setFormData(prev => ({
+              ...prev,
+              nome: updatedUser.nome || prev.nome,
+              email: updatedUser.email || prev.email
+            }));
+          }
+        } catch (profileError) {
+          console.error('Erro ao atualizar perfil:', profileError);
+          const errorMessage = profileError.message || profileError.response?.data?.message || 'Erro ao atualizar perfil. Verifique se o email não está em uso.';
+          setMessage({ 
+            type: 'error', 
+            text: errorMessage
+          });
+          setSaving(false);
+          return;
+        }
+      }
       
-      // Atualizar store
-      updateUser(updatedUser);
-      
-      // Se senha foi fornecida, alterar senha separadamente
-      if (formData.password.trim()) {
+      // Se senha foi fornecida, alterar senha separadamente (independente de atualização de perfil)
+      if (formData.password && formData.password.trim()) {
         try {
           await userService.changeMyPassword({
             current_password: formData.currentPassword || '',
@@ -123,8 +156,16 @@ const ProfilePage = () => {
           console.error('Erro ao alterar senha:', passwordError);
           setMessage({ 
             type: 'warning', 
-            text: 'Perfil atualizado, mas houve erro ao alterar senha. Verifique se a senha atual está correta.' 
+            text: passwordError.message || 'Perfil atualizado, mas houve erro ao alterar senha. Verifique se a senha atual está correta.' 
           });
+          // Limpar campos de senha mesmo em caso de erro
+          setFormData(prev => ({
+            ...prev,
+            password: '',
+            confirmPassword: '',
+            currentPassword: ''
+          }));
+          setSaving(false);
           return;
         }
       }
@@ -143,7 +184,7 @@ const ProfilePage = () => {
       console.error('Erro ao atualizar perfil:', error);
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.message || 'Erro ao atualizar perfil' 
+        text: error.message || error.response?.data?.message || 'Erro ao atualizar perfil' 
       });
     } finally {
       setSaving(false);
@@ -180,44 +221,16 @@ const ProfilePage = () => {
           <Card>
             <CardHeader
               avatar={
-                <Box position="relative">
-                  <Avatar 
-                    sx={{ 
-                      bgcolor: 'primary.main',
-                      width: 80,
-                      height: 80,
-                      fontSize: '2rem'
-                    }}
-                    src={user.profile_photo_url}
-                  >
-                    {!user.profile_photo_url && <PersonIcon fontSize="large" />}
-                  </Avatar>
-                  <Tooltip title="Alterar foto de perfil">
-                    <IconButton
-                      size="small"
-                      sx={{
-                        position: 'absolute',
-                        bottom: 0,
-                        right: 0,
-                        bgcolor: 'primary.main',
-                        color: 'white',
-                        '&:hover': {
-                          bgcolor: 'primary.dark',
-                        },
-                        width: 28,
-                        height: 28
-                      }}
-                      onClick={() => setShowImageCrop(true)}
-                      disabled={uploadingPhoto}
-                    >
-                      {uploadingPhoto ? (
-                        <CircularProgress size={16} color="inherit" />
-                      ) : (
-                        <PhotoCameraIcon fontSize="small" />
-                      )}
-                    </IconButton>
-                  </Tooltip>
-                </Box>
+                <Avatar 
+                  sx={{ 
+                    bgcolor: 'primary.main',
+                    width: 80,
+                    height: 80,
+                    fontSize: '2rem'
+                  }}
+                >
+                  <PersonIcon fontSize="large" />
+                </Avatar>
               }
               title="Informações do Usuário"
               subheader="Dados pessoais"
@@ -227,20 +240,28 @@ const ProfilePage = () => {
                 <Box display="flex" alignItems="center" gap={1}>
                   <PersonIcon color="action" />
                   <Typography variant="body2">
-                    <strong>Nome:</strong> {user.nome}
+                    <strong>Nome:</strong> {user.nome || user.name || '-'}
                   </Typography>
                 </Box>
                 <Box display="flex" alignItems="center" gap={1}>
                   <EmailIcon color="action" />
                   <Typography variant="body2">
-                    <strong>Email:</strong> {user.email}
+                    <strong>Email:</strong> {user.email || '-'}
                   </Typography>
                 </Box>
-                {user.perfil && (
+                {user.nivel && (
                   <Box display="flex" alignItems="center" gap={1}>
                     <LockIcon color="action" />
                     <Typography variant="body2">
-                      <strong>Perfil:</strong> {user.perfil}
+                      <strong>Nível:</strong> {user.nivel}
+                    </Typography>
+                  </Box>
+                )}
+                {user.cargo && (
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <LockIcon color="action" />
+                    <Typography variant="body2">
+                      <strong>Cargo:</strong> {user.cargo}
                     </Typography>
                   </Box>
                 )}
@@ -369,13 +390,6 @@ const ProfilePage = () => {
         </Grid>
       </Grid>
 
-      {/* Modal de edição de foto */}
-      <ImageCropModal
-        open={showImageCrop}
-        onClose={() => setShowImageCrop(false)}
-        onSave={handlePhotoUpload}
-        title="Editar Foto de Perfil"
-      />
     </Box>
   );
 };

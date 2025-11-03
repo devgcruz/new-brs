@@ -257,6 +257,25 @@ const entradaService = {
         }
       };
     }
+  },
+
+  /**
+   * Busca todos os dados de uma entrada, incluindo observações, para o relatório.
+   * @param {number} id - O ID_Entrada
+   * @returns {Promise<Object>} Resposta da API com os dados completos
+   */
+  async getEntradaCompleta(id) {
+    try {
+      const response = await makeAuthenticatedRequest(`/entrada-completa?id=${id}`);
+      if (response.success) {
+        return response.data;
+      } else {
+        throw new Error(response.message || 'Erro ao buscar dados completos do registro');
+      }
+    } catch (error) {
+      console.error('Erro em getEntradaCompleta:', error);
+      throw error;
+    }
   }
 
 };

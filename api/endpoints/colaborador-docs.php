@@ -75,7 +75,17 @@ function resolveDocAbsolutePath($storedPath) {
 // Verificar autenticação para operações normais (não para visualização/download)
 $usuario = null;
 if (!$isDocView) {
-    $usuario = middlewareAutenticacao();
+    try {
+        $usuario = middlewareAutenticacao();
+        if (!$usuario) {
+            // Se middlewareAutenticacao retornar false, respostaJson já foi chamado
+            // Mas garantimos que não continuamos
+            exit;
+        }
+    } catch (Exception $e) {
+        error_log("❌ Erro na autenticação: " . $e->getMessage());
+        respostaJson(false, null, 'Erro na autenticação: ' . $e->getMessage(), 401);
+    }
 }
 
 switch ($method) {
@@ -218,8 +228,19 @@ switch ($method) {
                 respostaJson(true, $docs);
                 
             } catch (Exception $e) {
-                logSimples('❌ Erro ao listar documentos', ['erro' => $e->getMessage()]);
-                respostaJson(false, null, 'Erro ao buscar documentos', 500);
+                $error_message = $e->getMessage();
+                error_log("❌ Erro ao listar documentos: " . $error_message);
+                
+                logSimples('❌ Erro ao listar documentos', [
+                    'erro' => $error_message,
+                    'colaborador_id' => $colaborador_id ?? 'N/A'
+                ]);
+                
+                $message = defined('PRODUCTION_MODE') && PRODUCTION_MODE 
+                    ? 'Erro ao buscar documentos. Contate o administrador.' 
+                    : 'Erro ao buscar documentos: ' . $error_message;
+                
+                respostaJson(false, null, $message, 500);
             }
         }
         break;
@@ -265,8 +286,9 @@ switch ($method) {
             respostaJson(false, null, 'Arquivo muito grande. Máximo 50MB.', 400);
         }
         
-        // Verificar espaço em disco
-        if (!checkDiskSpace($file['size'])) {
+        // Verificar espaço em disco (usar diretório correto)
+        $free_bytes = disk_free_space(COLABORADOR_DOCS_UPLOAD_DIR);
+        if ($free_bytes === false || $free_bytes < $file['size']) {
             respostaJson(false, null, 'Espaço insuficiente em disco', 507);
         }
         
@@ -275,8 +297,22 @@ switch ($method) {
             $date_path = date('Y/m/');
             $upload_dir = COLABORADOR_DOCS_UPLOAD_DIR . $date_path;
             
+            // Garantir que o diretório base existe e tem permissão de escrita
+            if (!is_dir(COLABORADOR_DOCS_UPLOAD_DIR)) {
+                if (!mkdir(COLABORADOR_DOCS_UPLOAD_DIR, 0755, true)) {
+                    respostaJson(false, null, 'Erro ao criar diretório de upload', 500);
+                }
+            }
+            
             if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0755, true);
+                if (!mkdir($upload_dir, 0755, true)) {
+                    respostaJson(false, null, 'Erro ao criar diretório de upload por data', 500);
+                }
+            }
+            
+            // Verificar permissão de escrita
+            if (!is_writable($upload_dir)) {
+                respostaJson(false, null, 'Diretório de upload sem permissão de escrita', 500);
             }
             
             // Sanitizar o nome do arquivo para evitar problemas
@@ -306,24 +342,120 @@ switch ($method) {
             $token_visualizacao = generateViewToken();
             
             $docs_table = getTableName('colaborador_docs');
-            $sql = "INSERT INTO $docs_table (
-                ID_Colaborador, DESCRICAO, CAMINHOPDF, token_visualizacao, TAMANHO_ARQUIVO, TIPO_ARQUIVO, DATA_REGISTRO, Usuario_Upload, created_at, updated_at
-            ) VALUES (
-                :colaborador_id, :descricao, :caminho_arquivo, :token_visualizacao, :tamanho, :tipo, NOW(), :usuario, NOW(), NOW()
-            )";
             
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([
-                'colaborador_id' => $colaborador_id,
-                'descricao' => sanitizar($descricao ?: $file['name']),
-                'caminho_arquivo' => $caminho_relativo,
-                'token_visualizacao' => $token_visualizacao,
-                'tamanho' => $file['size'],
-                'tipo' => $file_type,
-                'usuario' => $usuario['Usuario'] ?? $usuario['username'] ?? 'sistema'
-            ]);
-            
-            $doc_id = $pdo->lastInsertId();
+            // Verificar se a tabela existe e tem as colunas corretas
+            try {
+                $test_stmt = $pdo->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '$docs_table'");
+                $columns = $test_stmt->fetchAll(PDO::FETCH_COLUMN);
+                
+                // Construir SQL baseado nas colunas disponíveis
+                $columns_to_insert = [];
+                $values_to_insert = [];
+                $params_to_bind = [];
+                
+                // Colunas obrigatórias
+                if (in_array('ID_Colaborador', $columns)) {
+                    $columns_to_insert[] = 'ID_Colaborador';
+                    $values_to_insert[] = ':colaborador_id';
+                    $params_to_bind['colaborador_id'] = $colaborador_id;
+                }
+                
+                if (in_array('DESCRICAO', $columns)) {
+                    $columns_to_insert[] = 'DESCRICAO';
+                    $values_to_insert[] = ':descricao';
+                    $params_to_bind['descricao'] = sanitizar($descricao ?: $file['name']);
+                }
+                
+                if (in_array('CAMINHOPDF', $columns)) {
+                    $columns_to_insert[] = 'CAMINHOPDF';
+                    $values_to_insert[] = ':caminho_arquivo';
+                    $params_to_bind['caminho_arquivo'] = $caminho_relativo;
+                }
+                
+                if (in_array('token_visualizacao', $columns)) {
+                    $columns_to_insert[] = 'token_visualizacao';
+                    $values_to_insert[] = ':token_visualizacao';
+                    $params_to_bind['token_visualizacao'] = $token_visualizacao;
+                }
+                
+                if (in_array('TAMANHO_ARQUIVO', $columns)) {
+                    $columns_to_insert[] = 'TAMANHO_ARQUIVO';
+                    $values_to_insert[] = ':tamanho';
+                    $params_to_bind['tamanho'] = $file['size'];
+                }
+                
+                if (in_array('TIPO_ARQUIVO', $columns)) {
+                    $columns_to_insert[] = 'TIPO_ARQUIVO';
+                    $values_to_insert[] = ':tipo';
+                    $params_to_bind['tipo'] = $file_type;
+                }
+                
+                if (in_array('DATA_REGISTRO', $columns)) {
+                    $columns_to_insert[] = 'DATA_REGISTRO';
+                    $values_to_insert[] = 'NOW()';
+                }
+                
+                if (in_array('Usuario_Upload', $columns)) {
+                    $columns_to_insert[] = 'Usuario_Upload';
+                    $values_to_insert[] = ':usuario';
+                    $params_to_bind['usuario'] = $usuario['Usuario'] ?? $usuario['username'] ?? 'sistema';
+                }
+                
+                if (in_array('created_at', $columns)) {
+                    $columns_to_insert[] = 'created_at';
+                    $values_to_insert[] = 'NOW()';
+                }
+                
+                if (in_array('updated_at', $columns)) {
+                    $columns_to_insert[] = 'updated_at';
+                    $values_to_insert[] = 'NOW()';
+                }
+                
+                if (empty($columns_to_insert)) {
+                    throw new Exception('Nenhuma coluna válida encontrada na tabela');
+                }
+                
+                $sql = "INSERT INTO $docs_table (" . implode(', ', $columns_to_insert) . ") VALUES (" . implode(', ', $values_to_insert) . ")";
+                
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params_to_bind);
+                
+                $doc_id = $pdo->lastInsertId();
+                
+            } catch (PDOException $e) {
+                // Se der erro na verificação de colunas, tentar inserção simplificada
+                error_log("Erro ao verificar colunas ou inserir: " . $e->getMessage());
+                
+                // Tentar inserção básica com colunas mínimas
+                try {
+                    $sql = "INSERT INTO $docs_table (ID_Colaborador, DESCRICAO, CAMINHOPDF, token_visualizacao, TAMANHO_ARQUIVO, TIPO_ARQUIVO, DATA_REGISTRO) VALUES (:colaborador_id, :descricao, :caminho_arquivo, :token_visualizacao, :tamanho, :tipo, NOW())";
+                    
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->execute([
+                        'colaborador_id' => $colaborador_id,
+                        'descricao' => sanitizar($descricao ?: $file['name']),
+                        'caminho_arquivo' => $caminho_relativo,
+                        'token_visualizacao' => $token_visualizacao,
+                        'tamanho' => $file['size'],
+                        'tipo' => $file_type
+                    ]);
+                    
+                    $doc_id = $pdo->lastInsertId();
+                } catch (PDOException $e2) {
+                    // Se ainda der erro, logar e re-lançar
+                    error_log("Erro crítico ao inserir documento: " . $e2->getMessage());
+                    error_log("SQL: " . $sql);
+                    error_log("Params: " . json_encode([
+                        'colaborador_id' => $colaborador_id,
+                        'descricao' => $descricao ?: $file['name'],
+                        'caminho_arquivo' => $caminho_relativo,
+                        'token_visualizacao' => substr($token_visualizacao, 0, 10) . '...',
+                        'tamanho' => $file['size'],
+                        'tipo' => $file_type
+                    ]));
+                    throw $e2;
+                }
+            }
             
             logUpload('upload_success', [
                 'doc_id' => $doc_id,
@@ -343,8 +475,26 @@ switch ($method) {
             ], 'Documento enviado com sucesso', 201);
             
         } catch (Exception $e) {
-            logSimples('❌ Erro no upload de documento', ['erro' => $e->getMessage()]);
-            respostaJson(false, null, 'Erro interno no upload', 500);
+            $error_message = $e->getMessage();
+            $error_trace = $e->getTraceAsString();
+            
+            // Log detalhado do erro (mesmo em produção para debug)
+            error_log("❌ Erro no upload de documento: " . $error_message);
+            error_log("Trace: " . $error_trace);
+            
+            logSimples('❌ Erro no upload de documento', [
+                'erro' => $error_message,
+                'trace' => $error_trace,
+                'file' => $file['name'] ?? 'N/A',
+                'colaborador_id' => $colaborador_id ?? 'N/A'
+            ]);
+            
+            // Em produção, retornar mensagem genérica; em desenvolvimento, retornar erro detalhado
+            $message = defined('PRODUCTION_MODE') && PRODUCTION_MODE 
+                ? 'Erro interno no upload. Contate o administrador.' 
+                : 'Erro interno no upload: ' . $error_message;
+            
+            respostaJson(false, null, $message, 500);
         }
         break;
         

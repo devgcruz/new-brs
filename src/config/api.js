@@ -1,8 +1,14 @@
 // Configuração da API
 const API_CONFIG = {
-  // Em desenvolvimento, o backend (Apache/XAMPP) atende em http://localhost/brs/api
-  // Use REACT_APP_API_URL para sobrescrever em outros ambientes
-  BASE_URL: process.env.REACT_APP_API_URL || 'http://localhost/brs/api',
+  // URL base da API
+  // Em desenvolvimento: http://localhost/brs/api
+  // Em produção: https://brsreguladora.com.br/api
+  // Use REACT_APP_API_URL para sobrescrever via variável de ambiente
+  BASE_URL: process.env.REACT_APP_API_URL || (
+    process.env.NODE_ENV === 'production' 
+      ? 'https://brsreguladora.com.br/api'
+      : 'http://localhost/brs/api'
+  ),
   TIMEOUT: 10000, // 10 segundos
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY: 1000, // 1 segundo

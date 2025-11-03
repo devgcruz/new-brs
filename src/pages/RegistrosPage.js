@@ -291,6 +291,43 @@ const RegistrosPage = () => {
     return null;
   };
 
+  // Função para formatar data sem problemas de timezone (YYYY-MM-DD)
+  const formatarDataEntrada = (data) => {
+    if (!data || data === '0000-00-00') return 'N/A';
+    
+    try {
+      // Se for formato YYYY-MM-DD, parsear manualmente para evitar problemas de timezone
+      if (typeof data === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data)) {
+        const [year, month, day] = data.split('-').map(Number);
+        const dateObj = new Date(year, month - 1, day);
+        
+        if (isNaN(dateObj.getTime())) {
+          return 'Data inválida';
+        }
+        
+        return dateObj.toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        });
+      }
+      
+      // Para outros formatos, usar o método padrão
+      const dateObj = new Date(data);
+      if (isNaN(dateObj.getTime())) {
+        return 'Data inválida';
+      }
+      
+      return dateObj.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    } catch (error) {
+      return 'Data inválida';
+    }
+  };
+
   // Função para formatar a data da observação
   const formatarDataObservacao = (data) => {
     if (!data) return 'Data não disponível';
@@ -626,10 +663,7 @@ const RegistrosPage = () => {
                 </Box>
                 
                 <Typography variant="caption" display="block" sx={{ mt: 'auto', pt: 1 }}>
-                  Entrada: {entrada.DATA_ENTRADA && entrada.DATA_ENTRADA !== '0000-00-00' 
-                    ? new Date(entrada.DATA_ENTRADA).toLocaleDateString('pt-BR')
-                    : 'N/A'
-                  }
+                  Entrada: {formatarDataEntrada(entrada.DATA_ENTRADA)}
                 </Typography>
               </CardContent>
             </Card>

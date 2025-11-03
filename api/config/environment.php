@@ -16,7 +16,8 @@ define('ENABLE_LOGS', !PRODUCTION_MODE);
 if (PRODUCTION_MODE) {
     // Em produção, permitir o domínio real e localhost para desenvolvimento local
     define('ALLOWED_ORIGINS', [
-
+        'https://brsreguladora.com.br',
+        'https://www.brsreguladora.com.br',
         'http://localhost:3000',
         'http://localhost:3001',
         'http://127.0.0.1:3000'
@@ -29,3 +30,4 @@ if (PRODUCTION_MODE) {
         'http://127.0.0.1:3000'
     ]);
 }
+?>

@@ -5,25 +5,8 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# --- CORS at webserver level (handles OPTIONS before PHP) ---
-<IfModule mod_headers.c>
-    # Whitelist origins
-    SetEnvIfNoCase Origin "^http://localhost:3000$" ORIGIN_OK=$0
-    SetEnvIfNoCase Origin "^http://localhost:3001$" ORIGIN_OK=$0
-    SetEnvIfNoCase Origin "^http://127.0.0.1:3000$" ORIGIN_OK=$0
-    SetEnvIfNoCase Origin "^https://brsreguladora.com.br$" ORIGIN_OK=$0
-    SetEnvIfNoCase Origin "^https://www.brsreguladora.com.br$" ORIGIN_OK=$0
-
-    Header always set Access-Control-Allow-Origin "%{ORIGIN_OK}e" env=ORIGIN_OK
-    Header always set Access-Control-Allow-Credentials "true" env=ORIGIN_OK
-    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-API-Key, Accept" env=ORIGIN_OK
-    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" env=ORIGIN_OK
-    Header always set Vary "Origin"
-</IfModule>
-
-# Short-circuit preflight requests
-RewriteCond %{REQUEST_METHOD} =OPTIONS
-RewriteRule ^ - [R=204,L]
+# CORS é tratado no PHP (cors.php) para evitar duplicação de headers
+# Não definir headers CORS aqui no .htaccess
 
 # Route everything else to API router
 RewriteRule ^ index.php [QSA,L]
