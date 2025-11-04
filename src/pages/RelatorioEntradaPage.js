@@ -56,20 +56,22 @@ const RelatorioEntradaPage = () => {
       setLoading(true);
       setError('');
 
-      const response = await entradaService.getEntradas();
+      // Preparar filtros para enviar ao backend
+      const filtrosBackend = {};
+      
+      // Converter filtros de data para formato esperado pelo backend
+      if (filtros.dataInicio) {
+        filtrosBackend.data_inicio = filtros.dataInicio;
+      }
+      if (filtros.dataFim) {
+        filtrosBackend.data_fim = filtros.dataFim;
+      }
+
+      // Buscar registros com filtros aplicados no backend (sem paginação)
+      const response = await entradaService.getEntradas(filtrosBackend, { all: true });
 
       if (response.success) {
         let dados = response.data || [];
-
-        // Aplica o filtro de data
-        if (filtros.dataInicio && filtros.dataFim) {
-          const inicio = new Date(filtros.dataInicio);
-          const fim = new Date(filtros.dataFim);
-          dados = dados.filter(item => {
-            const dataRegistro = new Date(item.DATA_ENTRADA || item.data_entrada || item.data_registro);
-            return dataRegistro >= inicio && dataRegistro <= fim;
-          });
-        }
 
         setEntradas(dados);
         setSuccess(`${dados.length} registros encontrados`);

@@ -4,10 +4,27 @@
  * Baseado no padrão de pdfs.php
  */
 
+// Registrar handler de erros para capturar erros fatais
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        error_log("FATAL ERROR em colaborador-docs.php: " . $error['message'] . " em " . $error['file'] . ":" . $error['line']);
+        if (!headers_sent()) {
+            http_response_code(500);
+            header("Content-Type: application/json");
+            echo json_encode([
+                'success' => false, 
+                'message' => 'Erro interno do servidor. Verifique os logs para mais detalhes.'
+            ]);
+        }
+    }
+});
+
 // Definir o diretório base da API se não estiver definido
 if (!defined('API_BASE_DIR')) {
     define('API_BASE_DIR', dirname(__DIR__));
 }
+
 
 // Verificar se é visualização ou download (não usar CORS neste caso)
 $action = $_GET['action'] ?? 'list';
@@ -26,9 +43,24 @@ require_once API_BASE_DIR . "/config/upload.php";
 require_once API_BASE_DIR . "/middleware/auth.php";
 require_once API_BASE_DIR . "/helpers/auth.php";
 
+// Verificar se $pdo está disponível
+if (!isset($pdo) || !$pdo) {
+    error_log("ERROR: Conexão com banco de dados não disponível em colaborador-docs.php");
+    http_response_code(500);
+    header("Content-Type: application/json");
+    echo json_encode(['success' => false, 'message' => 'Erro de conexão com banco de dados']);
+    exit;
+}
+
 $method = $_SERVER['REQUEST_METHOD'];
 
 // Definir diretório de upload para documentos de colaboradores
+if (!defined('UPLOAD_BASE_DIR')) {
+    error_log("ERROR: UPLOAD_BASE_DIR não está definido");
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Erro de configuração do servidor']);
+    exit;
+}
 define('COLABORADOR_DOCS_UPLOAD_DIR', UPLOAD_BASE_DIR . 'colaborador-docs/');
 
 // Criar diretório se não existir
@@ -109,7 +141,7 @@ switch ($method) {
             
             try {
                 $docs_table = getTableName('colaborador_docs');
-                $stmt = $pdo->prepare("SELECT ID_Doc as id, DESCRICAO, CAMINHOPDF FROM $docs_table WHERE ID_Doc = :id AND token_visualizacao = :token LIMIT 1");
+                $stmt = $pdo->prepare("SELECT ID_Doc as id, DESCRICAO, CAMINHOPDF FROM `$docs_table` WHERE ID_Doc = :id AND token_visualizacao = :token LIMIT 1");
                 $stmt->execute([
                     'id' => $doc_id,
                     'token' => $view_token
@@ -165,7 +197,7 @@ switch ($method) {
             
             try {
                 $docs_table = getTableName('colaborador_docs');
-                $stmt = $pdo->prepare("SELECT ID_Doc as id, DESCRICAO, CAMINHOPDF FROM $docs_table WHERE ID_Doc = :id AND token_visualizacao = :token LIMIT 1");
+                $stmt = $pdo->prepare("SELECT ID_Doc as id, DESCRICAO, CAMINHOPDF FROM `$docs_table` WHERE ID_Doc = :id AND token_visualizacao = :token LIMIT 1");
                 $stmt->execute([
                     'id' => $doc_id,
                     'token' => $view_token
@@ -212,7 +244,11 @@ switch ($method) {
             try {
                 // Verificar se o colaborador existe
                 $colaboradores_table = getTableName('colaboradores');
-                $stmt = $pdo->prepare("SELECT id FROM $colaboradores_table WHERE id = :colaborador_id LIMIT 1");
+                if (empty($colaboradores_table)) {
+                    throw new Exception('Tabela de colaboradores não configurada');
+                }
+                
+                $stmt = $pdo->prepare("SELECT id FROM `$colaboradores_table` WHERE id = :colaborador_id LIMIT 1");
                 $stmt->execute(['colaborador_id' => $colaborador_id]);
                 
                 if (!$stmt->fetch()) {
@@ -221,22 +257,66 @@ switch ($method) {
                 
                 // Buscar documentos do colaborador
                 $docs_table = getTableName('colaborador_docs');
-                $stmt = $pdo->prepare("SELECT ID_Doc as id, ID_Colaborador, DESCRICAO, CAMINHOPDF, token_visualizacao, DATA_REGISTRO FROM $docs_table WHERE ID_Colaborador = :colaborador_id ORDER BY DATA_REGISTRO DESC");
+                if (empty($docs_table)) {
+                    throw new Exception('Tabela de documentos não configurada');
+                }
+                
+                // Verificar se a tabela existe antes de consultar
+                try {
+                    $check_table = $pdo->prepare("SELECT COUNT(*) as count FROM `$docs_table` LIMIT 1");
+                    $check_table->execute();
+                } catch (PDOException $e) {
+                    error_log("Tabela $docs_table não existe ou erro de acesso: " . $e->getMessage());
+                    // Se a tabela não existe, retornar array vazio em vez de erro
+                    respostaJson(true, []);
+                }
+                
+                $stmt = $pdo->prepare("SELECT ID_Doc as id, ID_Colaborador, DESCRICAO, CAMINHOPDF, token_visualizacao, DATA_REGISTRO FROM `$docs_table` WHERE ID_Colaborador = :colaborador_id ORDER BY DATA_REGISTRO DESC");
                 $stmt->execute(['colaborador_id' => $colaborador_id]);
-                $docs = $stmt->fetchAll();
+                $docs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                // Garantir que retornamos um array mesmo se vazio
+                if ($docs === false) {
+                    $docs = [];
+                }
                 
                 respostaJson(true, $docs);
                 
-            } catch (Exception $e) {
+            } catch (PDOException $e) {
                 $error_message = $e->getMessage();
-                error_log("❌ Erro ao listar documentos: " . $error_message);
+                $error_code = $e->getCode();
+                error_log("❌ Erro PDO ao listar documentos: " . $error_message . " (Code: " . $error_code . ")");
                 
                 logSimples('❌ Erro ao listar documentos', [
                     'erro' => $error_message,
-                    'colaborador_id' => $colaborador_id ?? 'N/A'
+                    'codigo' => $error_code,
+                    'colaborador_id' => $colaborador_id ?? 'N/A',
+                    'tipo' => 'PDOException'
                 ]);
                 
-                $message = defined('PRODUCTION_MODE') && PRODUCTION_MODE 
+                // Se for erro de tabela não encontrada, retornar array vazio
+                if (strpos($error_message, "doesn't exist") !== false || strpos($error_message, "Unknown table") !== false) {
+                    respostaJson(true, []);
+                } else {
+                    $message = (defined('PRODUCTION_MODE') && PRODUCTION_MODE) 
+                        ? 'Erro ao buscar documentos. Contate o administrador.' 
+                        : 'Erro ao buscar documentos: ' . $error_message;
+                    
+                    respostaJson(false, null, $message, 500);
+                }
+            } catch (Exception $e) {
+                $error_message = $e->getMessage();
+                error_log("❌ Erro ao listar documentos: " . $error_message);
+                error_log("Stack trace: " . $e->getTraceAsString());
+                
+                logSimples('❌ Erro ao listar documentos', [
+                    'erro' => $error_message,
+                    'colaborador_id' => $colaborador_id ?? 'N/A',
+                    'tipo' => 'Exception',
+                    'trace' => $e->getTraceAsString()
+                ]);
+                
+                $message = (defined('PRODUCTION_MODE') && PRODUCTION_MODE) 
                     ? 'Erro ao buscar documentos. Contate o administrador.' 
                     : 'Erro ao buscar documentos: ' . $error_message;
                 
@@ -247,8 +327,20 @@ switch ($method) {
         
     case 'POST':
         // Upload de documento
+        try {
         if (!isset($_FILES['doc_file']) || $_FILES['doc_file']['error'] !== UPLOAD_ERR_OK) {
-            respostaJson(false, null, 'Erro no upload do arquivo', 400);
+                $upload_error = $_FILES['doc_file']['error'] ?? 'N/A';
+                $error_messages = [
+                    UPLOAD_ERR_INI_SIZE => 'Arquivo excede o tamanho máximo permitido pelo servidor',
+                    UPLOAD_ERR_FORM_SIZE => 'Arquivo excede o tamanho máximo permitido pelo formulário',
+                    UPLOAD_ERR_PARTIAL => 'Upload parcial do arquivo',
+                    UPLOAD_ERR_NO_FILE => 'Nenhum arquivo foi enviado',
+                    UPLOAD_ERR_NO_TMP_DIR => 'Diretório temporário não encontrado',
+                    UPLOAD_ERR_CANT_WRITE => 'Falha ao escrever arquivo no disco',
+                    UPLOAD_ERR_EXTENSION => 'Upload bloqueado por extensão'
+                ];
+                $message = $error_messages[$upload_error] ?? 'Erro desconhecido no upload do arquivo';
+                respostaJson(false, null, $message, 400);
         }
         
         $colaborador_id = $_POST['ID_Colaborador'] ?? $_POST['colaborador_id'] ?? '';
@@ -259,21 +351,35 @@ switch ($method) {
         }
         
         // Verificar se o colaborador existe
+            try {
         $colaboradores_table = getTableName('colaboradores');
-        $stmt = $pdo->prepare("SELECT id FROM $colaboradores_table WHERE id = :colaborador_id LIMIT 1");
+                $stmt = $pdo->prepare("SELECT id FROM `$colaboradores_table` WHERE id = :colaborador_id LIMIT 1");
         $stmt->execute(['colaborador_id' => $colaborador_id]);
         
         if (!$stmt->fetch()) {
             respostaJson(false, null, 'Colaborador não encontrado', 404);
+                }
+            } catch (PDOException $e) {
+                error_log("ERRO ao verificar colaborador: " . $e->getMessage());
+                respostaJson(false, null, 'Erro ao verificar colaborador', 500);
         }
         
         $file = $_FILES['doc_file'];
+            
+            // Verificar se o arquivo temporário existe
+            if (!file_exists($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
+                respostaJson(false, null, 'Arquivo temporário não encontrado ou inválido', 400);
+            }
         
         // Validar arquivo - permitir PDF, imagens e outros tipos comuns
         $allowed_types = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
         $allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png'];
         
-        $file_type = mime_content_type($file['tmp_name']);
+            $file_type = @mime_content_type($file['tmp_name']);
+            if (!$file_type) {
+                // Fallback: usar o tipo do arquivo enviado
+                $file_type = $file['type'] ?? 'application/octet-stream';
+            }
         $file_extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         
         if (!in_array($file_type, $allowed_types) || !in_array($file_extension, $allowed_extensions)) {
@@ -287,12 +393,17 @@ switch ($method) {
         }
         
         // Verificar espaço em disco (usar diretório correto)
-        $free_bytes = disk_free_space(COLABORADOR_DOCS_UPLOAD_DIR);
-        if ($free_bytes === false || $free_bytes < $file['size']) {
+            if (!defined('COLABORADOR_DOCS_UPLOAD_DIR')) {
+                define('COLABORADOR_DOCS_UPLOAD_DIR', UPLOAD_BASE_DIR . 'colaborador-docs/');
+            }
+            
+            $free_bytes = @disk_free_space(COLABORADOR_DOCS_UPLOAD_DIR);
+            if ($free_bytes === false) {
+                error_log("Warning: Não foi possível verificar espaço em disco para " . COLABORADOR_DOCS_UPLOAD_DIR);
+                // Continuar mesmo assim, pode ser problema de permissão
+            } else if ($free_bytes < $file['size']) {
             respostaJson(false, null, 'Espaço insuficiente em disco', 507);
         }
-        
-        try {
             // Criar estrutura de pastas por data
             $date_path = date('Y/m/');
             $upload_dir = COLABORADOR_DOCS_UPLOAD_DIR . $date_path;
@@ -300,18 +411,21 @@ switch ($method) {
             // Garantir que o diretório base existe e tem permissão de escrita
             if (!is_dir(COLABORADOR_DOCS_UPLOAD_DIR)) {
                 if (!mkdir(COLABORADOR_DOCS_UPLOAD_DIR, 0755, true)) {
+                    error_log("ERRO: Falha ao criar diretório base: " . COLABORADOR_DOCS_UPLOAD_DIR);
                     respostaJson(false, null, 'Erro ao criar diretório de upload', 500);
                 }
             }
             
             if (!is_dir($upload_dir)) {
                 if (!mkdir($upload_dir, 0755, true)) {
+                    error_log("ERRO: Falha ao criar diretório por data: " . $upload_dir);
                     respostaJson(false, null, 'Erro ao criar diretório de upload por data', 500);
                 }
             }
             
             // Verificar permissão de escrita
             if (!is_writable($upload_dir)) {
+                error_log("ERRO: Diretório sem permissão de escrita: " . $upload_dir);
                 respostaJson(false, null, 'Diretório de upload sem permissão de escrita', 500);
             }
             
@@ -333,8 +447,15 @@ switch ($method) {
             if (!move_uploaded_file($file['tmp_name'], $file_path)) {
                 // Fallback: usar copy se move_uploaded_file falhar
                 if (!copy($file['tmp_name'], $file_path)) {
+                    error_log("ERRO: Falha ao salvar arquivo. copy() também falhou");
                     respostaJson(false, null, 'Erro ao salvar arquivo', 500);
                 }
+            }
+            
+            // Verificar se o arquivo foi realmente salvo
+            if (!file_exists($file_path)) {
+                error_log("ERRO: Arquivo não foi salvo corretamente: " . $file_path);
+                respostaJson(false, null, 'Erro ao verificar arquivo salvo', 500);
             }
             
             // Salvar informações no banco
@@ -343,116 +464,74 @@ switch ($method) {
             
             $docs_table = getTableName('colaborador_docs');
             
-            // Verificar se a tabela existe e tem as colunas corretas
+            // Inserção simplificada - usar apenas colunas obrigatórias conhecidas
             try {
-                $test_stmt = $pdo->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '$docs_table'");
-                $columns = $test_stmt->fetchAll(PDO::FETCH_COLUMN);
-                
-                // Construir SQL baseado nas colunas disponíveis
-                $columns_to_insert = [];
-                $values_to_insert = [];
-                $params_to_bind = [];
-                
-                // Colunas obrigatórias
-                if (in_array('ID_Colaborador', $columns)) {
-                    $columns_to_insert[] = 'ID_Colaborador';
-                    $values_to_insert[] = ':colaborador_id';
-                    $params_to_bind['colaborador_id'] = $colaborador_id;
-                }
-                
-                if (in_array('DESCRICAO', $columns)) {
-                    $columns_to_insert[] = 'DESCRICAO';
-                    $values_to_insert[] = ':descricao';
-                    $params_to_bind['descricao'] = sanitizar($descricao ?: $file['name']);
-                }
-                
-                if (in_array('CAMINHOPDF', $columns)) {
-                    $columns_to_insert[] = 'CAMINHOPDF';
-                    $values_to_insert[] = ':caminho_arquivo';
-                    $params_to_bind['caminho_arquivo'] = $caminho_relativo;
-                }
-                
-                if (in_array('token_visualizacao', $columns)) {
-                    $columns_to_insert[] = 'token_visualizacao';
-                    $values_to_insert[] = ':token_visualizacao';
-                    $params_to_bind['token_visualizacao'] = $token_visualizacao;
-                }
-                
-                if (in_array('TAMANHO_ARQUIVO', $columns)) {
-                    $columns_to_insert[] = 'TAMANHO_ARQUIVO';
-                    $values_to_insert[] = ':tamanho';
-                    $params_to_bind['tamanho'] = $file['size'];
-                }
-                
-                if (in_array('TIPO_ARQUIVO', $columns)) {
-                    $columns_to_insert[] = 'TIPO_ARQUIVO';
-                    $values_to_insert[] = ':tipo';
-                    $params_to_bind['tipo'] = $file_type;
-                }
-                
-                if (in_array('DATA_REGISTRO', $columns)) {
-                    $columns_to_insert[] = 'DATA_REGISTRO';
-                    $values_to_insert[] = 'NOW()';
-                }
-                
-                if (in_array('Usuario_Upload', $columns)) {
-                    $columns_to_insert[] = 'Usuario_Upload';
-                    $values_to_insert[] = ':usuario';
-                    $params_to_bind['usuario'] = $usuario['Usuario'] ?? $usuario['username'] ?? 'sistema';
-                }
-                
-                if (in_array('created_at', $columns)) {
-                    $columns_to_insert[] = 'created_at';
-                    $values_to_insert[] = 'NOW()';
-                }
-                
-                if (in_array('updated_at', $columns)) {
-                    $columns_to_insert[] = 'updated_at';
-                    $values_to_insert[] = 'NOW()';
-                }
-                
-                if (empty($columns_to_insert)) {
-                    throw new Exception('Nenhuma coluna válida encontrada na tabela');
-                }
-                
-                $sql = "INSERT INTO $docs_table (" . implode(', ', $columns_to_insert) . ") VALUES (" . implode(', ', $values_to_insert) . ")";
+                // Primeiro, tentar inserção com todas as colunas possíveis
+                $sql = "INSERT INTO `$docs_table` (
+                    ID_Colaborador, 
+                    DESCRICAO, 
+                    CAMINHOPDF, 
+                    token_visualizacao, 
+                    TAMANHO_ARQUIVO, 
+                    TIPO_ARQUIVO, 
+                    DATA_REGISTRO
+                ) VALUES (
+                    :colaborador_id, 
+                    :descricao, 
+                    :caminho_arquivo, 
+                    :token_visualizacao, 
+                    :tamanho, 
+                    :tipo, 
+                    NOW()
+                )";
                 
                 $stmt = $pdo->prepare($sql);
-                $stmt->execute($params_to_bind);
+                $params = [
+                    'colaborador_id' => $colaborador_id,
+                    'descricao' => sanitizar($descricao ?: $file['name']),
+                    'caminho_arquivo' => $caminho_relativo,
+                    'token_visualizacao' => $token_visualizacao,
+                    'tamanho' => $file['size'],
+                    'tipo' => $file_type
+                ];
                 
+                $stmt->execute($params);
                 $doc_id = $pdo->lastInsertId();
                 
-            } catch (PDOException $e) {
-                // Se der erro na verificação de colunas, tentar inserção simplificada
-                error_log("Erro ao verificar colunas ou inserir: " . $e->getMessage());
-                
-                // Tentar inserção básica com colunas mínimas
+                // Se a tabela tiver coluna Usuario_Upload, atualizar
                 try {
-                    $sql = "INSERT INTO $docs_table (ID_Colaborador, DESCRICAO, CAMINHOPDF, token_visualizacao, TAMANHO_ARQUIVO, TIPO_ARQUIVO, DATA_REGISTRO) VALUES (:colaborador_id, :descricao, :caminho_arquivo, :token_visualizacao, :tamanho, :tipo, NOW())";
+                    $update_sql = "UPDATE `$docs_table` SET Usuario_Upload = :usuario WHERE ID_Doc = :doc_id";
+                    $update_stmt = $pdo->prepare($update_sql);
+                    $update_stmt->execute([
+                        'usuario' => $usuario['Usuario'] ?? $usuario['username'] ?? 'sistema',
+                        'doc_id' => $doc_id
+                    ]);
+                } catch (PDOException $e) {
+                    // Ignorar erro se a coluna não existir
+                }
+                
+            } catch (PDOException $e) {
+                error_log("ERRO CRÍTICO ao inserir documento: " . $e->getMessage());
+                error_log("SQL: " . $sql);
+                error_log("Código do erro: " . $e->getCode());
+                
+                // Tentar inserção mínima sem colunas opcionais
+                try {
+                    $sql_min = "INSERT INTO `$docs_table` (ID_Colaborador, DESCRICAO, CAMINHOPDF, token_visualizacao, DATA_REGISTRO) VALUES (:colaborador_id, :descricao, :caminho_arquivo, :token_visualizacao, NOW())";
                     
-                    $stmt = $pdo->prepare($sql);
-                    $stmt->execute([
+                    $stmt_min = $pdo->prepare($sql_min);
+                    $stmt_min->execute([
                         'colaborador_id' => $colaborador_id,
                         'descricao' => sanitizar($descricao ?: $file['name']),
                         'caminho_arquivo' => $caminho_relativo,
-                        'token_visualizacao' => $token_visualizacao,
-                        'tamanho' => $file['size'],
-                        'tipo' => $file_type
+                        'token_visualizacao' => $token_visualizacao
                     ]);
                     
                     $doc_id = $pdo->lastInsertId();
+                    
                 } catch (PDOException $e2) {
-                    // Se ainda der erro, logar e re-lançar
-                    error_log("Erro crítico ao inserir documento: " . $e2->getMessage());
-                    error_log("SQL: " . $sql);
-                    error_log("Params: " . json_encode([
-                        'colaborador_id' => $colaborador_id,
-                        'descricao' => $descricao ?: $file['name'],
-                        'caminho_arquivo' => $caminho_relativo,
-                        'token_visualizacao' => substr($token_visualizacao, 0, 10) . '...',
-                        'tamanho' => $file['size'],
-                        'tipo' => $file_type
-                    ]));
+                    error_log("ERRO FATAL: Inserção mínima também falhou: " . $e2->getMessage());
+                    error_log("SQL mínima: " . $sql_min);
                     throw $e2;
                 }
             }
@@ -474,23 +553,61 @@ switch ($method) {
                 'token_visualizacao' => $token_visualizacao
             ], 'Documento enviado com sucesso', 201);
             
+        } catch (PDOException $e) {
+            $error_message = $e->getMessage();
+            $error_code = $e->getCode();
+            $error_info = $e->errorInfo ?? [];
+            
+            // Log detalhado do erro (sempre logar, mesmo em produção)
+            $log_message = "❌ ERRO PDO no upload de documento:\n";
+            $log_message .= "Mensagem: " . $error_message . "\n";
+            $log_message .= "Código: " . $error_code . "\n";
+            $log_message .= "Info: " . print_r($error_info, true) . "\n";
+            $log_message .= "Arquivo: " . ($file['name'] ?? 'N/A') . "\n";
+            $log_message .= "Colaborador ID: " . ($colaborador_id ?? 'N/A') . "\n";
+            $log_message .= "Trace: " . $e->getTraceAsString();
+            
+            error_log($log_message);
+            
+            logSimples('❌ Erro PDO no upload de documento', [
+                'erro' => $error_message,
+                'codigo' => $error_code,
+                'info' => $error_info,
+                'file' => $file['name'] ?? 'N/A',
+                'colaborador_id' => $colaborador_id ?? 'N/A'
+            ]);
+            
+            // Em produção, retornar mensagem genérica; em desenvolvimento, retornar erro detalhado
+            $message = (defined('PRODUCTION_MODE') && PRODUCTION_MODE) 
+                ? 'Erro interno no upload. Contate o administrador.' 
+                : 'Erro interno no upload: ' . $error_message . ' (Código: ' . $error_code . ')';
+            
+            respostaJson(false, null, $message, 500);
+            
         } catch (Exception $e) {
             $error_message = $e->getMessage();
             $error_trace = $e->getTraceAsString();
             
-            // Log detalhado do erro (mesmo em produção para debug)
-            error_log("❌ Erro no upload de documento: " . $error_message);
-            error_log("Trace: " . $error_trace);
+            // Log detalhado do erro (sempre logar, mesmo em produção)
+            $log_message = "❌ ERRO no upload de documento:\n";
+            $log_message .= "Mensagem: " . $error_message . "\n";
+            $log_message .= "Tipo: " . get_class($e) . "\n";
+            $log_message .= "Arquivo: " . ($file['name'] ?? 'N/A') . "\n";
+            $log_message .= "Colaborador ID: " . ($colaborador_id ?? 'N/A') . "\n";
+            $log_message .= "Trace: " . $error_trace;
+            
+            error_log($log_message);
             
             logSimples('❌ Erro no upload de documento', [
                 'erro' => $error_message,
+                'tipo' => get_class($e),
                 'trace' => $error_trace,
                 'file' => $file['name'] ?? 'N/A',
                 'colaborador_id' => $colaborador_id ?? 'N/A'
             ]);
             
             // Em produção, retornar mensagem genérica; em desenvolvimento, retornar erro detalhado
-            $message = defined('PRODUCTION_MODE') && PRODUCTION_MODE 
+            $message = (defined('PRODUCTION_MODE') && PRODUCTION_MODE) 
                 ? 'Erro interno no upload. Contate o administrador.' 
                 : 'Erro interno no upload: ' . $error_message;
             
@@ -509,7 +626,7 @@ switch ($method) {
         try {
             // Buscar documento usando o nome correto da tabela
             $docs_table = getTableName('colaborador_docs');
-            $stmt = $pdo->prepare("SELECT * FROM $docs_table WHERE ID_Doc = :id LIMIT 1");
+            $stmt = $pdo->prepare("SELECT * FROM `$docs_table` WHERE ID_Doc = :id LIMIT 1");
             $stmt->execute(['id' => $doc_id]);
             $doc = $stmt->fetch();
             
@@ -524,7 +641,7 @@ switch ($method) {
             }
             
             // Deletar registro do banco
-            $stmt = $pdo->prepare("DELETE FROM $docs_table WHERE ID_Doc = :id");
+            $stmt = $pdo->prepare("DELETE FROM `$docs_table` WHERE ID_Doc = :id");
             $stmt->execute(['id' => $doc_id]);
             
             logSimples('✅ Documento deletado', [

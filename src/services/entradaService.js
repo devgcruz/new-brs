@@ -74,6 +74,10 @@ const entradaService = {
       if (pagination.per_page) {
         queryParams.append('per_page', pagination.per_page);
       }
+      // Permitir buscar todos os registros para relatórios
+      if (pagination.all === true) {
+        queryParams.append('all', 'true');
+      }
 
       const url = `/entradas${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
       const response = await makeAuthenticatedRequest(url);

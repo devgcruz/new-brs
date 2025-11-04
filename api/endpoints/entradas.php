@@ -36,6 +36,13 @@ switch ($method) {
         $data_fim = $_GET['data_fim'] ?? '';
         $page = (int)($_GET['page'] ?? 1);
         $per_page = (int)($_GET['per_page'] ?? 15);
+        $all = isset($_GET['all']) && $_GET['all'] === 'true';
+        
+        // Se for para buscar todos (relatórios), não usar paginação
+        if ($all) {
+            $page = 1;
+            $per_page = 999999; // Número muito alto para buscar todos
+        }
         
         $offset = ($page - 1) * $per_page;
         
@@ -64,11 +71,19 @@ switch ($method) {
         }
         
         if (!empty($data_inicio)) {
+            // Se a data não tiver hora, adicionar 00:00:00
+            if (strlen($data_inicio) <= 10) {
+                $data_inicio = $data_inicio . ' 00:00:00';
+            }
             $where_conditions[] = "DATA_ENTRADA >= :data_inicio";
             $params['data_inicio'] = $data_inicio;
         }
         
         if (!empty($data_fim)) {
+            // Se a data não tiver hora, adicionar 23:59:59 para incluir todo o dia
+            if (strlen($data_fim) <= 10) {
+                $data_fim = $data_fim . ' 23:59:59';
+            }
             $where_conditions[] = "DATA_ENTRADA <= :data_fim";
             $params['data_fim'] = $data_fim;
         }
@@ -104,13 +119,21 @@ switch ($method) {
                 FROM $entradas_table e 
                 LEFT JOIN $colaboradores_table c ON e.ID_COLABORADOR = c.id 
                 $where_clause 
-                ORDER BY e.Id_Entrada DESC 
-                LIMIT :offset, :per_page
+                ORDER BY e.Id_Entrada DESC
             ";
             
+            // Adicionar LIMIT apenas se não for para buscar todos
+            if (!$all) {
+                $sql .= " LIMIT :offset, :per_page";
+            }
+            
             $stmt = $pdo->prepare($sql);
-            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-            $stmt->bindValue(':per_page', $per_page, PDO::PARAM_INT);
+            
+            // Bind LIMIT apenas se não for para buscar todos
+            if (!$all) {
+                $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+                $stmt->bindValue(':per_page', $per_page, PDO::PARAM_INT);
+            }
             
             foreach ($params as $key => $value) {
                 $stmt->bindValue(":$key", $value);
@@ -163,17 +186,28 @@ switch ($method) {
                 $entrada['pdfs'] = $pdf_stmt->fetchAll();
             }
             
-            $last_page = ceil($total / $per_page);
+            // Calcular paginação apenas se não for para buscar todos
+            if ($all) {
+                $last_page = 1;
+                $per_page_meta = $total;
+                $from = 1;
+                $to = $total;
+            } else {
+                $last_page = ceil($total / $per_page);
+                $per_page_meta = $per_page;
+                $from = $offset + 1;
+                $to = min($offset + $per_page, $total);
+            }
             
             respostaJson(true, [
                 'data' => $entradas,
                 'meta' => [
                     'current_page' => $page,
                     'last_page' => $last_page,
-                    'per_page' => $per_page,
+                    'per_page' => $per_page_meta,
                     'total' => $total,
-                    'from' => $offset + 1,
-                    'to' => min($offset + $per_page, $total)
+                    'from' => $from,
+                    'to' => $to
                 ]
             ]);
             

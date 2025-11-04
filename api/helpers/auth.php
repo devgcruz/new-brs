@@ -227,5 +227,12 @@ function logSimples($mensagem, $dados = []) {
     
     // Definir o diretório base da API se não estiver definido
     $logDir = defined('API_BASE_DIR') ? API_BASE_DIR . '/logs' : dirname(__DIR__) . '/logs';
-    file_put_contents($logDir . '/api.log', $log, FILE_APPEND | LOCK_EX);
+    
+    // Garantir que o diretório existe
+    if (!is_dir($logDir)) {
+        @mkdir($logDir, 0755, true);
+    }
+    
+    // Tentar escrever no arquivo de log
+    @file_put_contents($logDir . '/api.log', $log, FILE_APPEND | LOCK_EX);
 }
